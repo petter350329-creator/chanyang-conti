@@ -152,17 +152,23 @@ async function renderPageToCanvas(hymnal, pageNum, scale) {
     const url = await getDownloadURL(sRef(storage, `hymnals/${hymnal}/pages/${pageNum}.jpg`));
     return await new Promise((res, rej) => {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const w = img.naturalWidth;
-        const h = img.naturalHeight;
+        const w = img.naturalWidth || img.width;
+        const h = img.naturalHeight || img.height;
         canvas.width = w;
         canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0);
         res(canvas);
       };
-      img.onerror = rej;
+      img.onerror = (e) => {
+        logError('이미지 로드 오류', `${hymnal} p${pageNum}`);
+        rej(e);
+      };
+      // crossOrigin 없이 직접 로드
       img.src = url;
     });
   } catch(e) {

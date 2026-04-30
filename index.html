@@ -5,14 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>찬양 콘티</title>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
 <!-- Firebase -->
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
-import { getDatabase, ref, set, get, onValue, push, remove, update }
+import { getDatabase, ref, set, get, onValue, push, remove, update, off }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-import { getStorage, ref as sRef, uploadBytes, getDownloadURL, listAll }
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL }
   from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-storage.js';
 
 const firebaseConfig = {
@@ -32,76 +34,93 @@ const storage = getStorage(app);
 
 // ── 전역 상태 ──
 let currentUser = null;
-let userRole = null; // 'admin' | 'member' | null
-let currentView = 'contiList'; // contiList | contiEdit | contiView | mappingEdit | uploadFile
+let userRole = null;
 let currentContiId = null;
-let pdfCache = {}; // hymnal → pdfDoc
-let mappingCache = {}; // hymnal → {songNum: [pages]}
+let mappingCache = {};
+let titlesCache = {};    // hymnal → {num: title}
 let contiList = [];
-let viewPages = []; // 현재 열람 중인 페이지 목록
+let viewPages = [];
 let viewIndex = 0;
 let touchStartX = 0;
+let contiListenerOff = null; // onValue 해제 함수
 
 // 기본 새찬송가 매핑 (fallback)
-const DEFAULT_MAP_NEW = {1:[1,2],2:3,3:4,4:5,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:12,13:13,14:14,15:15,16:16,17:17,18:18,19:19,20:20,21:21,22:22,23:23,24:24,25:25,26:26,27:[27,28],28:29,29:30,30:31,31:32,32:33,33:34,34:35,35:36,36:37,37:38,38:[39,40],39:41,40:42,41:[43,44],42:[45,46],43:47,44:48,45:49,46:50,47:51,48:52,49:53,50:54,51:[55,56],52:57,53:58,54:59,55:60,56:61,57:62,58:63,59:64,60:65,61:66,62:67,63:68,64:69,65:70,66:71,67:72,68:73,69:74,70:75,71:76,72:77,73:78,74:79,75:80,76:81,77:82,78:83,79:84,80:85,81:86,82:87,83:88,84:89,85:90,86:91,87:92,88:93,89:94,90:95,91:96,92:97,93:98,94:99,95:100,96:101,97:102,98:103,99:104,100:105,101:106,102:107,103:108,104:109,105:110,106:111,107:112,108:113,109:114,110:115,111:116,112:117,113:118,114:[119,120],115:121,116:122,117:123,118:124,119:125,120:126,121:127,122:128,123:129,124:130,125:131,126:132,127:133,128:134,129:135,130:136,131:137,132:138,133:139,134:140,135:141,136:142,137:143,138:144,139:145,140:146,141:147,142:148,143:149,144:150,145:151,146:152,147:153,148:154,149:155,150:156,151:157,152:158,153:159,154:160,155:161,156:162,157:163,158:164,159:165,160:166,161:167,162:168,163:169,164:170,165:171,166:172,167:173,168:174,169:175,170:176,171:177,172:178,173:179,174:180,175:181,176:182,177:[183,184],178:185,179:186,180:187,181:188,182:189,183:190,184:191,185:192,186:193,187:194,188:195,189:196,190:197,191:198,192:199,193:200,194:[201,202],195:203,196:204,197:205,198:206,199:207,200:208,201:209,202:210,203:211,204:212,205:213,206:214,207:215,208:216,209:217,210:218,211:219,212:220,213:221,214:222,215:223,216:224,217:225,218:226,219:227,220:228,221:229,222:230,223:231,224:232,225:233,226:234,227:[235,236],228:237,229:238,230:239,231:240,232:241,233:242,234:243,235:244,236:245,237:246,238:247,239:248,240:249,241:250,242:251,243:252,244:253,245:254,246:255,247:256,248:257,249:258,250:259,251:260,252:261,253:262,254:263,255:264,256:265,257:266,258:267,259:268,260:269,261:270,262:271,263:272,264:273,265:274,266:275,267:276,268:277,269:278,270:279,271:280,272:281,273:282,274:283,275:284,276:285,277:286,278:287,279:288,280:289,281:290,282:291,283:292,284:293,285:294,286:295,287:296,288:297,289:298,290:299,291:300,292:301,293:302,294:303,295:304,296:305,297:306,298:307,299:308,300:309,301:310,302:311,303:312,304:[313,314],305:315,306:316,307:317,308:318,309:319,310:320,311:321,312:322,313:323,314:324,315:325,316:326,317:327,318:328,319:329,320:330,321:331,322:332,323:333,324:334,325:335,326:336,327:337,328:338,329:339,330:340,331:341,332:342,333:343,334:344,335:345,336:346,337:347,338:348,339:349,340:350,341:351,342:352,343:353,344:[354,355],345:356,346:[357,358],347:359,348:360,349:361,350:362,351:363};
+const DEFAULT_MAP_NEW = {1:[1,2],2:3,3:4,4:5,5:5,6:6,7:7,8:8,9:9,10:10,11:11,12:12,13:13,14:14,15:15,16:16,17:17,18:18,19:19,20:20,21:21,22:22,23:23,24:24,25:25,26:26,27:[27,28],28:29,29:30,30:31,31:32,32:33,33:34,34:35,35:36,36:37,37:38,38:[39,40],39:41,40:42,41:[43,44],42:[45,46],43:47,44:48,45:49,46:50,47:51,48:52,49:53,50:54,51:[55,56],52:57,53:58,54:59,55:60,56:61,57:62,58:63,59:64,60:65,61:66,62:67,63:68,64:69,65:70,66:71,67:72,68:73,69:74,70:75,71:76,72:77,73:78,74:79,75:80,76:81,77:82,78:83,79:84,80:85,81:86,82:87,83:88,84:89,85:90,86:91,87:92,88:93,89:94,90:95,91:96,92:97,93:98,94:99,95:100,96:101,97:102,98:103,99:104,100:105,101:106,102:107,103:108,104:109,105:110,106:111,107:112,108:113,109:114,110:115,111:116,112:117,113:118,114:[119,120],115:121,116:122,117:123,118:124,119:125,120:126,121:127,122:128,123:129,124:130,125:131,126:132,127:133,128:134,129:135,130:136,131:137,132:138,133:139,134:140,135:141,136:142,137:143,138:144,139:145,140:146,141:147,142:148,143:149,144:150,145:151,146:152,147:153,148:154,149:155,150:156,151:157,152:158,153:159,154:160,155:161,156:162,157:163,158:164,159:165,160:166,161:167,162:168,163:169,164:170,165:171,166:172,167:173,168:174,169:175,170:176,171:177,172:[178],173:179,174:180,175:181,176:182,177:[183,184],178:185,179:186,180:187,181:188,182:189,183:190,184:191,185:192,186:193,187:194,188:195,189:196,190:197,191:198,192:199,193:200,194:[201,202],195:203,196:204,197:205,198:206,199:207,200:208,201:209,202:210,203:211,204:212,205:213,206:214,207:215,208:216,209:217,210:218,211:219,212:220,213:221,214:222,215:223,216:224,217:225,218:226,219:227,220:228,221:229,222:230,223:231,224:232,225:233,226:234,227:[235,236],228:237,229:238,230:239,231:240,232:241,233:242,234:243,235:244,236:245,237:246,238:247,239:248,240:249,241:250,242:251,243:252,244:253,245:254,246:255,247:256,248:257,249:258,250:259,251:260,252:261,253:262,254:263,255:264,256:265,257:266,258:267,259:268,260:269,261:270,262:271,263:272,264:273,265:274,266:275,267:276,268:277,269:278,270:279,271:280,272:281,273:282,274:283,275:284,276:285,277:286,278:287,279:288,280:289,281:290,282:291,283:292,284:293,285:294,286:295,287:296,288:297,289:298,290:299,291:300,292:301,293:302,294:303,295:304,296:305,297:306,298:307,299:308,300:309,301:310,302:311,303:312,304:[313,314],305:315,306:316,307:317,308:318,309:319,310:320,311:321,312:322,313:323,314:324,315:325,316:326,317:327,318:328,319:329,320:330,321:331,322:332,323:333,324:334,325:335,326:336,327:337,328:338,329:339,330:340,331:341,332:342,333:343,334:344,335:345,336:346,337:347,338:348,339:349,340:350,341:351,342:352,343:353,344:[354,355],345:356,346:[357,358],347:359,348:360,349:361,350:362,351:363};
 
 const TITLES_NEW = {"1":"천지창조주 하나님","2":"다 감사해","3":"거록 거록 거록하신","4":"거록 거록 거록하신 주","5":"그 빛난 보좌 둘러 선","6":"거록 거록 높이 계신","7":"거록하고 정결하신","8":"거록한 시온의 주님","9":"거록한 신천신지","10":"공중에 지저귀는 새 소리에","11":"내 영혼아 신령과 진정으로","12":"다 감사하라 주 하나님께","13":"만왕의 왕 만주의 주","14":"믿음의 백성들이","15":"보좌에 앉으신","16":"성령 감동 새 요한이","17":"세상 만물 창조하신","18":"시온산의 창조주를","19":"시온의 아들들아","20":"신실하고 전능하신","21":"아버지의 생기 말씀","22":"아침의 나라 동방에서","23":"영생의 천국 말씀","24":"경배하고 찬송하라","25":"자비롭고 자비롭다","26":"전능하사 영광받기","27":"지극히 거룩 거룩하신","28":"지극히 거룩하고","29":"지극히 거룩하신 내 아버지","30":"찬양 찬양 찬양을 드리세","31":"찬양하라 만민들아","32":"창조주의 약속 나라","33":"천지 만물 지으신","34":"천지 만물 창조하신","35":"할렐루야 새 노래로","36":"할렐루야 우리 모두","37":"그 모든 능력 지혜 근원","38":"내 영혼의 사모하는 주님","39":"나의 생명이신 주님","40":"내 안에서 행하시는","41":"내 마음의 소망이신","42":"이 밤도 아버지 하나님의","43":"맑은 물과 곤은 길이","44":"예수께서 약속하신","45":"산천초목 수려한 곳","46":"약속하신 예언대로","47":"오래 품은 생명 씨앗","48":"진리의 꽃이 활짝 피는","49":"하늘에서 들려오는","50":"길가 밭에 뿌린 심령","51":"하늘이 택한 이긴자가","52":"육천년간 갇추어서","53":"하늘의 씨 뿌려진","54":"나 시온산에 올라 와","55":"나는 누구인가","56":"승리의 나팔 소리","57":"보좌 위에 앉으신 이","58":"나는 나팔 부는 제사장","59":"성경 예언대로","60":"그 누가 하늘나라","61":"찬란한 빛 동방에서","62":"찬란한 빛 시온성 보라","63":"참 놀랍고 기쁜 소식","64":"우리에게 주어진","65":"변함 없고 정금 같은","66":"유월절 밤 다락방에","67":"선지자와 사도들의","68":"육천년 깊은 밤","69":"진리의 빛을 따라","70":"나팔 소리 불리매","71":"보낸 사자 날 위하여","72":"나팔 불어 외친다","73":"나팔 소리 울리네","74":"성경 속에 감추었던","75":"오늘날의 구원의 길","76":"온 세상에 전파하세","77":"신천지 창조의 주님","78":"외치어라 외치어라","79":"우리 모두 진리로","80":"멸망의 거짓 목자","81":"모세 때 약속하신","82":"모세여 예레미야여","83":"혼돈 무지 어둠 중에","84":"하나님의 인을 맞은","85":"하나님의 자비로운","86":"내 영혼이 죄를 짓고","87":"불어라 하늘문화","88":"내 마음에 감추었던","89":"내 주 예수 오심 바라 보니","90":"내가 가진 모든 것","91":"내가 주를 첨 뵙딘 날","92":"때 되었네 때 되었네","93":"때가 되어 비유 비사","94":"마음이 상한 자 오라","95":"사람의 계명으로","96":"만왕의 왕 만주의 주(천군가)","97":"천국백성 받는 복은","98":"밀려오네 밀려오네","99":"성경대로 약속대로","100":"밤낮 없이 뛰고 뛰는","101":"세상 사람 알아야 할","102":"보소서 내 나라","103":"보아라 맑은 샘물","104":"시온의 성도들아","105":"이긴자 보혜사","106":"하나님이 세상 위해","107":"만민들아 귀 기울여","108":"복을 받세 복을 받세","109":"불지어다 형제여","110":"비유풀이 배운 사람","111":"빛 되신 창조주 하나님","112":"약속의 나라 신천지의","113":"새요한은 누구인가","114":"예수 그리스도의 계시라","115":"그 옛날 모세 선지","116":"해 돋는 곳 이 강산에","117":"예수님의 계시 말씀","118":"예수님의 새 이름으로","119":"하나님이 택한 사자","120":"새 힘을 주시리라","121":"사랑하는 우리 주님","122":"산 좋고 물 맑은","123":"산을 넘고 바다 건너","124":"신천지는 아름다운","125":"거록한 주님 영광","126":"날마다 주를 섬기며","127":"하나님이 명하셨다","128":"새 나라 시온산에","129":"새 말씀 새 기도로","130":"만소성 크신 사명","131":"보라 신랑 예수 오셨네","132":"하나님 예수님 이긴자","133":"보내 주마 약속하신","134":"보석보다 귀한","135":"개벽을 알리는","136":"빛을 입은 자들아 나팔 소리","137":"생명 말씀 우리 맘에","138":"생명 실과 사모하여","139":"생명과 죽음의 길","140":"세상에서 구원하여","141":"생명나무 열매 맺는","142":"소경된 자 눈을 뜨고","143":"육의 싸움 영의 싸움","144":"생명의 빛 되신 예수","145":"만민 위해 세운 기호","146":"약속의 땅","147":"만물의 마지막이 되어서","148":"만왕의 왕 어린양이","149":"말일에 우뚝 솟은","150":"맑고 빛난 신천지","151":"성령께서 함께 하시니","152":"먼 옛날 선지 사도들도","153":"샤론의 장미 무궁화꽃","154":"서기동래 동성서행","155":"서쪽에서 전한 복음","156":"시온산 우뚝 서니","157":"서로를 배려하는","158":"서쪽의 기운이","159":"선지자의 약속대로","160":"시온산에 나팔 불 때","161":"천상천하 볼 자 없던","162":"신천신지 아름다움","163":"천히 쓰신 하나님 책","164":"청함 받은 백성들아","165":"시대마다 악한 자","166":"시온산에 오른 우리","167":"시온성을 허락하셨네","168":"시온에서 부르는","169":"하늘 문이 열리니","170":"신천지 창조 역사","171":"하늘 높은 진리 성음","172":"하늘 사랑 가득 담긴","173":"하늘 소망 가득 담은","174":"하늘 영광 이 땅 위에","175":"하늘과 땅 진동하는","176":"하늘나라 신천지에","177":"하늘에 계신 우리","178":"선지사도 입을 통해","179":"성경 육십육 권","180":"성령으로 오신 예수","181":"성경 예언 성취 순리","182":"스승이 계심이라","183":"하나님이 계시록에","184":"시온은 시온은","185":"신천신지 거록한 성","186":"신천지 거록한 성","187":"신천지 비전은","188":"신천지 승리의 노래","189":"주님께서 허락하신","190":"신천지 하늘나라","191":"임금 되신 예수께서","192":"신천지는 하나님과","193":"신천지여 찬양하라","194":"씨는 말씀이요","195":"십사만 사천인은 누구인가","196":"아담의 죄값으로","197":"약속의 목자 이긴자가","198":"어두운 밤 같은","199":"이긴자는 낙원 안의","200":"어두워진 세상 중에","201":"어둠의 흑암 권세","202":"신천지는 하늘나라","203":"하늘의 뜻을 좇아","204":"여기까지 걸어 온 길","205":"여자가 도망간 후","206":"영계의 거록한 나라","207":"태고이후 끊임 없이","208":"하나님이 창조하신 신천신지","209":"예수님의 씨 뿌리는","210":"예수님의 추수 밭으로","211":"하나님의 추수 역사","212":"하나님이 마음 합한","213":"하나님이 사랑하사","214":"하나님이 선민에게","215":"하나님이 창조하신 온 세상","216":"하나님이 천사 통해","217":"우리가 말씀으로","218":"우리는 성민이다","219":"우리는 열두지파","220":"우리는 예수님의","221":"육천년 한 맺힌","222":"모이네 모이네","223":"너는 나를 사랑하느냐","224":"너희는 예수님같이","225":"모세의 이름처럼","226":"눈을 들어 바라보네","227":"육천년 한이 맺힌","228":"약속하신 우리 주님","229":"태초에 하나님이","230":"하늘이여 천사들이여","231":"한 맺힌 육천년의","232":"한 목자를 택하시어","233":"영원히 찬양하리","234":"육천년 피맺힌","235":"육천년간 진리 말씀","236":"하나님께 택함 받은","237":"바벨론은 귀신의 처소","238":"하나님을 깊이 생각하라","239":"이긴자들 만나보니","240":"육천년의 긴긴 세월 역사","241":"정금으로 이루어진","242":"으뜸되는 말씀 받은","243":"이긴자인 야곱은","244":"참 진리로 우리들을","245":"날마다 주시는","246":"이긴자들 부르는","247":"이긴자의 나팔 소리","248":"인생 백년 살다가","249":"일곱 교회 일곱 별에","250":"일천구백육십육년","251":"잠든 바다 위를 걸을 때","252":"육천년의 긴긴 세월 어두움","253":"주 계신 시온산 들어와서","254":"주 예수를 믿는다 하고","255":"주 재림 때 먹을 양식","256":"주로 인해 핍박 받는","257":"주의 크고 귀한 이름","258":"증거장막 성전에서","259":"증거장막 진리 성음","260":"하나님의 오른손에 책이","261":"이긴자의 호령소리","262":"지극히 높은 곳엔","263":"진리의 꽃 밝게 피는","264":"창세기에 나온 뱀이","265":"처음 하늘 처음 장막","266":"주님 말씀 첫 역사","267":"날 구원하신 주님","268":"주 재림의 유월절","269":"주의 뜻을 아는 우리","270":"하나님의 오른손에 봉함됐던","271":"전진하는 동안에는","272":"추수 때라 좋은 절기","273":"추수꾼과 천사들의","274":"추수하세 추수를 하세","275":"출애굽의 이룬 것은","276":"충성되고 지혜 있는 목자","277":"만국을 미혹한","278":"새 노래로 노래하라","279":"영롱한 아침해가","280":"택한 백성 부르시는","281":"택함 받은 주의 그릇","282":"육천년 역사 속에","283":"하나님께로 택함 받은","284":"하나님 우편에","285":"하나님과 예수님","286":"하나님은 빛이시니","287":"하나님의 나라 좋은 나라","288":"하나님의 마음 속에","289":"주님이여 하늘양식","290":"눈을 뜨고 보아도","291":"동방에 솟아오른","292":"하나님의 새 나라는","293":"죽임을 당하신 어린양","294":"하나님의 성음일세","295":"하나님의 시온산은","296":"하나님의 약속으로","297":"진리 찾아 인내하여","298":"기나긴 장구한 세월","299":"오늘도 이긴자의","300":"새 하늘 새 땅 이뤄지니","301":"새 하늘 새 땅엔 밤이 없고","302":"새 하늘 새 복음","303":"새벽 하늘에 샛별이","304":"하나님의 약속하신","305":"하나님의 약속 따라","306":"하나님의 오른손에 봉하여진","307":"이 높고 푸른 시온산","308":"찬양하라 증거장막","309":"이 높은 동산에서","310":"이 세상 천지에","311":"이긴자가 세운 나라","312":"참 목자의 말씀으로","313":"하나님이 창조하신 새 나라","314":"어둔 세상에 내가 살면서","315":"하늘나라 이루기 전","316":"하늘에 소망 두고","317":"하늘에는 영광이요","318":"창조주 하나님이","319":"거록한 성 하늘나라","320":"보좌에서 나온 생수","321":"세상 중에 이 내 몸이","322":"세상에 이런 일이","323":"수정 같은 생명수가","324":"천지 만물 지으신 주","325":"골고다 위 십자가에","326":"굶주리고 목 말랐던","327":"하늘에서 이루신 뜻","328":"하늘의 뜻 이루신 곳","329":"성경을 먹물삼아","330":"성도가 구원받아","331":"어두운 밤 도적같이","332":"하늘의 부름 받은","333":"하나님의 보좌 앞에","334":"힘차게 들려오는","335":"해 돋는 나라","336":"흑암 속에 잠자는 자","337":"흑암한 세상 중에","338":"배도자의 거짓진술","339":"깰지어다 깰지어다 일어나서","340":"나 죄사함을 받은 후","341":"생명수와 성령으로","342":"천하 만국 소성하라","343":"놀라고 놀라라","344":"거록하신 하나님의","345":"초림때에 예수님은","346":"하나님의 생기 받은","347":"신천지가 증거하는","348":"하나님의 소명 받은","349":"아버지 하나님","350":"불꽃처럼 일어나라","351":"하나님이 보내주신"};
 
 // pdf.js 설정
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// ── 인증 상태 감지 ──
+// ── 인증 + 화이트리스트 통합 ──
 onAuthStateChanged(auth, async user => {
-  if (user) {
-    currentUser = user;
-    const snap = await get(ref(db, `users/${user.uid}/role`));
-    userRole = snap.exists() ? snap.val() : null;
-    if (!userRole) {
-      // 미등록 사용자 → 대기 화면
-      showScreen('waiting');
-    } else {
-      await loadMapping();
-      showScreen(userRole === 'admin' ? 'admin' : 'member');
-    }
-  } else {
+  if (!user) {
     currentUser = null;
     userRole = null;
     showScreen('login');
+    return;
   }
+
+  currentUser = user;
+
+  // 화이트리스트 자동 승인 (미등록 사용자만)
+  const uid = user.uid;
+  const emailKey = btoa(user.email).replace(/=/g, '');
+  const [wSnap, uSnap] = await Promise.all([
+    get(ref(db, `whitelist/${emailKey}`)),
+    get(ref(db, `users/${uid}`))
+  ]);
+  if (wSnap.exists() && !uSnap.exists()) {
+    const { role } = wSnap.val();
+    await set(ref(db, `users/${uid}`), {
+      email: user.email, name: user.displayName, role, createdAt: Date.now()
+    });
+  }
+
+  // 역할 확인
+  const roleSnap = await get(ref(db, `users/${uid}/role`));
+  userRole = roleSnap.exists() ? roleSnap.val() : null;
+
+  if (!userRole) {
+    showScreen('waiting');
+    return;
+  }
+
+  await loadMapping();
+
+  // 유저 이름 표시
+  const name = user.displayName || user.email;
+  const shortName = name.length > 8 ? name.slice(0, 8) + '…' : name;
+  document.querySelectorAll('.user-name-display').forEach(el => el.textContent = shortName);
+
+  showScreen(userRole === 'admin' ? 'admin' : 'member');
 });
 
 // ── 로그인/로그아웃 ──
 window.doLogin = async () => {
-  try {
-    await signInWithPopup(auth, new GoogleAuthProvider());
-  } catch(e) { alert('로그인 실패: ' + e.message); }
+  try { await signInWithPopup(auth, new GoogleAuthProvider()); }
+  catch(e) { alert('로그인 실패: ' + e.message); }
 };
-
-window.doLogout = async () => {
-  await signOut(auth);
-};
+window.doLogout = async () => { await signOut(auth); };
 
 // ── 화면 전환 ──
-function showScreen(screen) {
+function showScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
-  const el = document.getElementById('screen-' + screen);
+  const el = document.getElementById('screen-' + name);
   if (el) el.style.display = 'flex';
-
-  if (screen === 'admin') renderAdminHome();
-  if (screen === 'member') renderMemberHome();
+  if (name === 'admin') renderAdminHome();
+  if (name === 'member') renderMemberHome();
 }
 
 // ── 매핑 로드 ──
 async function loadMapping() {
   for (const hymnal of ['new', 'old', 'ccm']) {
-    const snap = await get(ref(db, `mapping/${hymnal}`));
-    if (snap.exists()) {
-      mappingCache[hymnal] = snap.val();
-    } else if (hymnal === 'new') {
-      mappingCache['new'] = DEFAULT_MAP_NEW;
-    } else {
-      mappingCache[hymnal] = {};
-    }
+    const [mSnap, tSnap] = await Promise.all([
+      get(ref(db, `mapping/${hymnal}`)),
+      get(ref(db, `titles/${hymnal}`))
+    ]);
+    mappingCache[hymnal] = mSnap.exists() ? mSnap.val() : (hymnal === 'new' ? DEFAULT_MAP_NEW : {});
+    titlesCache[hymnal] = tSnap.exists() ? tSnap.val() : (hymnal === 'new' ? TITLES_NEW : {});
   }
 }
 
@@ -112,93 +131,75 @@ function getPages(hymnal, songNum) {
   return Array.isArray(v) ? v : [v];
 }
 
+function getTitle(hymnal, songNum) {
+  const t = titlesCache[hymnal] || {};
+  return t[songNum] || t[String(songNum)] || '';
+}
+
 // ── 로그 ──
 let logCount = 0;
-function logError(context, e) {
+function log(context, e) {
   console.log(`[${context}]`, e);
   const logEl = document.getElementById('log-content');
-  if (logEl) {
-    logCount++;
-    const line = document.createElement('div');
-    const isErr = context.includes('실패') || context.includes('오류');
-    line.style.cssText = `padding:4px 8px;border-bottom:1px solid var(--border);font-size:.72rem;color:${isErr?'var(--danger)':'var(--muted)'}`;
-    line.textContent = `[${context}] ${e?.message || e}`;
-    logEl.prepend(line);
-    // 로그 버튼 카운트 표시
-    const btn = document.getElementById('btn-log');
-    if (btn) btn.textContent = `🔴 로그(${logCount})`;
-  }
+  if (!logEl) return;
+  logCount++;
+  const line = document.createElement('div');
+  const isErr = context.includes('실패') || context.includes('오류');
+  line.style.cssText = `padding:4px 8px;border-bottom:1px solid var(--border);font-size:.72rem;color:${isErr ? 'var(--danger)' : 'var(--muted)'}`;
+  line.textContent = `[${context}] ${e?.message || e}`;
+  logEl.prepend(line);
+  const btn = document.getElementById('btn-log');
+  if (btn) btn.textContent = `🔴 로그(${logCount})`;
 }
 
-// ── PDF 로드 (Storage) - CORS 우회: ArrayBuffer로 로드 ──
-async function loadPdf(hymnal) {
-  if (pdfCache[hymnal]) return pdfCache[hymnal];
-  try {
-    const url = await getDownloadURL(sRef(storage, `hymnals/${hymnal}/main.pdf`));
-    logError('PDF URL', `${hymnal}: ${url.slice(0,60)}...`);
-    // CORS 우회: fetch로 ArrayBuffer 다운로드 후 pdf.js에 전달
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const buf = await resp.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-    pdfCache[hymnal] = pdf;
-    logError('PDF 로드 성공', `${hymnal}: ${pdf.numPages}페이지`);
-    return pdf;
-  } catch(e) {
-    logError('PDF 로드 실패', e);
-    return null;
-  }
-}
-
-// ── 페이지 렌더링 (img 태그 방식) ──
-async function renderPageToCanvas(hymnal, pageNum, scale) {
+// ── JPG 렌더링 (img 요소 반환) ──
+async function renderPage(hymnal, pageNum) {
   try {
     const url = await getDownloadURL(sRef(storage, `hymnals/${hymnal}/pages/${pageNum}.jpg`));
-    logError('JPG URL', `p${pageNum} ok`);
     const resp = await fetch(url, { mode: 'cors' });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
-    logError('JPG blob', `p${pageNum} size=${blob.size}`);
     const objUrl = URL.createObjectURL(blob);
-    // img 태그 반환 (canvas 대신)
     const img = document.createElement('img');
     img.src = objUrl;
     img.style.cssText = 'width:100%;display:block;background:#fff';
     img.dataset.objUrl = objUrl;
-    logError('렌더 완료', `p${pageNum}`);
+    log('렌더 완료', `${hymnal} p${pageNum}`);
     return img;
   } catch(e) {
-    logError('JPG 실패', `p${pageNum}: ${e.message}`);
+    log('렌더 실패', `${hymnal} p${pageNum}: ${e.message}`);
     throw e;
   }
 }
 
 // ════════════════════════════════════════
-// ── 관리자 화면 ──
+// ── 관리자 ──
 // ════════════════════════════════════════
 
-async function renderAdminHome() {
-  const el = document.getElementById('admin-content');
-  el.innerHTML = `<div class="loading">콘티 목록 불러오는 중...</div>`;
+function renderAdminHome() {
+  // 기존 리스너 해제
+  if (contiListenerOff) { contiListenerOff(); contiListenerOff = null; }
 
-  // 실시간 콘티 목록
-  onValue(ref(db, 'contis'), snap => {
+  const el = document.getElementById('admin-content');
+  el.innerHTML = `<div class="loading">불러오는 중...</div>`;
+
+  const dbRef = ref(db, 'contis');
+  contiListenerOff = onValue(dbRef, snap => {
     const data = snap.val() || {};
     const list = Object.entries(data)
       .map(([id, v]) => ({ id, ...v }))
       .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 60); // 최근 2개월 약 60개
+      .slice(0, 60);
 
     if (!list.length) {
-      el.innerHTML = `<div class="empty-state"><div class="bi">📋</div><p>등록된 콘티가 없어요<br>새 콘티를 만들어보세요</p></div>`;
+      el.innerHTML = `<div class="empty-state"><div class="bi">📋</div><p>콘티가 없어요<br>새로 만들어보세요</p></div>`;
       return;
     }
-
     el.innerHTML = list.map(c => `
       <div class="conti-card" onclick="openContiEdit('${c.id}')">
         <div class="cc-date">${formatDate(c.date)}</div>
-        <div class="cc-songs">${(c.songs||[]).length}곡</div>
-        <div class="cc-preview">${(c.songs||[]).slice(0,4).map(s=>`<span>${s.hymnal==='new'?'':s.hymnal.toUpperCase()+' '}${s.num}번</span>`).join('')}${(c.songs||[]).length>4?'...':''}</div>
+        <div class="cc-songs">${(c.songs || []).length}곡</div>
+        <div class="cc-preview">${(c.songs || []).slice(0, 4).map(s => `<span>${s.hymnal !== 'new' ? `[${s.hymnal.toUpperCase()}] ` : ''}${s.num}번</span>`).join('')}${(c.songs || []).length > 4 ? '<span>…</span>' : ''}</div>
         <div class="cc-actions" onclick="event.stopPropagation()">
           <button onclick="deleteConti('${c.id}')" class="btn-danger-xs">삭제</button>
         </div>
@@ -207,28 +208,27 @@ async function renderAdminHome() {
   });
 }
 
+// ── 에디터 열기/닫기 ── (핵심 버그 수정: admin-body 통째로 숨김)
 window.openContiEdit = async (id) => {
   currentContiId = id;
-  const snap = id === 'new' ? null : await get(ref(db, `contis/${id}`));
+  const snap = (id && id !== 'new') ? await get(ref(db, `contis/${id}`)) : null;
   const conti = snap && snap.exists() ? snap.val() : { date: today(), songs: [] };
-  contiList = conti.songs || [];
-  renderContiEditor(conti);
-  document.getElementById('admin-content').style.display = 'none';
+  contiList = [...(conti.songs || [])];
+
+  document.getElementById('admin-body').style.display = 'none';
   document.getElementById('admin-editor').style.display = 'flex';
+
+  document.getElementById('editor-date').value = conti.date || today();
+  renderContiList();
+  renderEditorPreview();
 };
 
 window.closeEditor = () => {
   document.getElementById('admin-editor').style.display = 'none';
-  document.getElementById('admin-content').style.display = 'block';
+  document.getElementById('admin-body').style.display = 'grid';
   contiList = [];
   currentContiId = null;
 };
-
-function renderContiEditor(conti) {
-  document.getElementById('editor-date').value = conti.date || today();
-  renderContiList();
-  renderEditorPreview();
-}
 
 function renderContiList() {
   const el = document.getElementById('editor-songs');
@@ -239,14 +239,14 @@ function renderContiList() {
   }
   el.innerHTML = contiList.map((item, i) => `
     <div class="ci">
-      <div class="ord">${i+1}</div>
+      <div class="ord">${i + 1}</div>
       <div class="info">
-        <div class="sn">${item.hymnal!=='new'?`<span style="color:var(--accent2);font-size:.65rem">[${item.hymnal.toUpperCase()}]</span> `:''}${item.num}번</div>
-        <div class="st">${item.title||''}</div>
+        <div class="sn">${item.hymnal !== 'new' ? `<span class="hymnal-tag">[${item.hymnal.toUpperCase()}]</span> ` : ''}${item.num}번</div>
+        <div class="st">${item.title || ''}</div>
       </div>
-      <div style="display:flex;gap:4px">
-        ${i>0?`<button class="btn-mv" onclick="moveSong(${i},-1)">↑</button>`:''}
-        ${i<contiList.length-1?`<button class="btn-mv" onclick="moveSong(${i},1)">↓</button>`:''}
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        ${i > 0 ? `<button class="btn-mv" onclick="moveSong(${i},-1)">↑</button>` : ''}
+        ${i < contiList.length - 1 ? `<button class="btn-mv" onclick="moveSong(${i},1)">↓</button>` : ''}
         <button class="btn-rm" onclick="removeSong(${i})">✕</button>
       </div>
     </div>
@@ -264,13 +264,12 @@ window.removeSong = (idx) => {
   contiList.splice(idx, 1);
   renderContiList();
   renderEditorPreview();
-  updateSaveBtnState();
 };
 
 async function renderEditorPreview() {
   const grid = document.getElementById('editor-preview');
   if (!contiList.length) {
-    grid.innerHTML = '<div class="empty-state"><div class="bi">🎶</div><p>곡을 추가하면<br>미리보기가 표시돼요</p></div>';
+    grid.innerHTML = '<div class="empty-state"><div class="bi">🎶</div><p>곡을 추가하면<br>악보가 표시돼요</p></div>';
     return;
   }
   grid.innerHTML = '';
@@ -278,17 +277,23 @@ async function renderEditorPreview() {
     const pages = getPages(item.hymnal, item.num);
     if (!pages) { addErrCard(grid, item, '매핑 없음'); continue; }
     for (const pgN of pages) {
+      const card = document.createElement('div');
+      card.className = 'pcard';
       try {
-        const el = await renderPageToCanvas(item.hymnal, pgN, 0.8);
-        const card = document.createElement('div');
-        card.className = 'pcard';
-        card.appendChild(el);
-        const cf = document.createElement('div');
-        cf.className = 'cf';
-        cf.innerHTML = `<strong>${item.num}번</strong> ${(item.title||'').slice(0,10)} <span class="pg-badge" onclick="openMappingModal('${item.hymnal}',${item.num})">${pages.length>1?`p.${pages[0]}-${pages[pages.length-1]}`:`p.${pgN}`}</span>`;
-        card.appendChild(cf);
-        grid.appendChild(card);
-      } catch(e) { addErrCard(grid, item, 'PDF 미업로드'); }
+        const imgEl = await renderPage(item.hymnal, pgN);
+        card.appendChild(imgEl);
+      } catch {
+        const ph = document.createElement('div');
+        ph.style.cssText = 'padding:20px;text-align:center;color:var(--danger);font-size:.78rem;background:#1a1d27';
+        ph.textContent = `${item.num}번 · PDF 미업로드`;
+        card.appendChild(ph);
+      }
+      const cf = document.createElement('div');
+      cf.className = 'cf';
+      const pageLabel = pages.length > 1 ? `p.${pages[0]}~${pages[pages.length - 1]}` : `p.${pgN}`;
+      cf.innerHTML = `<strong>${item.num}번</strong> <span class="pg-badge" onclick="openMappingModal('${item.hymnal}',${item.num})">${pageLabel}</span>`;
+      card.appendChild(cf);
+      grid.appendChild(card);
     }
   }
 }
@@ -296,28 +301,33 @@ async function renderEditorPreview() {
 function addErrCard(grid, item, msg) {
   const card = document.createElement('div');
   card.className = 'pcard';
-  card.innerHTML = `<div style="padding:20px;text-align:center;color:var(--danger);font-size:.78rem">${item.num}번<br>${msg}</div><div class="cf"><strong>${item.num}번</strong></div>`;
+  card.innerHTML = `<div style="padding:20px;text-align:center;color:var(--danger);font-size:.78rem">${item.num}번<br>${msg}</div>
+    <div class="cf"><strong>${item.num}번</strong> <span class="pg-badge" onclick="openMappingModal('${item.hymnal}',${item.num})">매핑 추가</span></div>`;
   grid.appendChild(card);
 }
 
 window.saveConti = async () => {
   const date = document.getElementById('editor-date').value;
   if (!date) { alert('날짜를 입력해주세요'); return; }
-  const data = { date, songs: contiList, updatedAt: Date.now() };
-  if (currentContiId && currentContiId !== 'new') {
-    await update(ref(db, `contis/${currentContiId}`), data);
-  } else {
-    const newRef = push(ref(db, 'contis'));
-    await set(newRef, data);
-    currentContiId = newRef.key;
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true; btn.textContent = '저장 중…';
+  try {
+    const data = { date, songs: contiList, updatedAt: Date.now() };
+    if (currentContiId && currentContiId !== 'new') {
+      await update(ref(db, `contis/${currentContiId}`), data);
+    } else {
+      const newRef = push(ref(db, 'contis'));
+      await set(newRef, data);
+      currentContiId = newRef.key;
+    }
+    showToast('✅ 저장됐어요');
+  } catch(e) {
+    log('저장 실패', e);
+    alert('저장 실패: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '저장';
   }
-  showToast('✅ 저장됐어요');
-  updateSaveBtnState();
 };
-
-function updateSaveBtnState() {
-  document.getElementById('btn-save').textContent = '저장';
-}
 
 window.deleteConti = async (id) => {
   if (!confirm('이 콘티를 삭제할까요?')) return;
@@ -325,7 +335,7 @@ window.deleteConti = async (id) => {
   showToast('삭제됐어요');
 };
 
-// ── 검색 ──
+// ── 검색 (구찬송가/CCM도 Firebase 제목 참조) ──
 let searchTO = null;
 window.onSearch = (val) => {
   clearTimeout(searchTO);
@@ -337,23 +347,33 @@ function doSearch(q) {
   if (!q) { res.classList.remove('show'); return; }
 
   const hymnal = document.getElementById('hymnal-select').value;
-  const titles = hymnal === 'new' ? TITLES_NEW : {};
+  const titles = titlesCache[hymnal] || {};
   const items = [];
-  const qn = q.replace(/\s/g,'').toLowerCase();
-
+  const qLower = q.replace(/\s/g, '').toLowerCase();
   const num = parseInt(q);
-  if (!isNaN(num) && num >= 1) items.push({ num, title: titles[num] || `${num}번` });
 
+  // 번호 검색
+  if (!isNaN(num) && num >= 1) {
+    items.push({ num, title: getTitle(hymnal, num) || `${num}번` });
+  }
+
+  // 제목 검색
   for (const [n, t] of Object.entries(titles)) {
-    if (t.replace(/\s/g,'').toLowerCase().includes(qn) && !items.find(i=>i.num===parseInt(n))) {
+    if (parseInt(n) === num) continue;
+    if (t.replace(/\s/g, '').toLowerCase().includes(qLower)) {
       items.push({ num: parseInt(n), title: t });
     }
     if (items.length >= 8) break;
   }
 
+  if (!items.length && !isNaN(num) && num >= 1) {
+    // 번호로만 추가 (제목 없는 찬송집)
+    items.push({ num, title: `${num}번` });
+  }
+
   res.innerHTML = items.length
-    ? items.map(it => `<div class="si" onclick="addSong('${hymnal}',${it.num},'${it.title.replace(/'/g,"\\'")}')"><div class="num">${it.num}</div><div class="ttl">${it.title}</div></div>`).join('')
-    : `<div class="si" style="color:var(--muted);justify-content:center">결과 없음</div>`;
+    ? items.map(it => `<div class="si" onclick="addSong('${hymnal}',${it.num},'${(it.title || '').replace(/'/g, "\\'")}')"><div class="num">${it.num}</div><div class="ttl">${it.title || `${it.num}번`}</div></div>`).join('')
+    : `<div class="si muted">결과 없음</div>`;
   res.classList.add('show');
 }
 
@@ -363,7 +383,6 @@ window.addSong = (hymnal, num, title) => {
   document.getElementById('search-results').classList.remove('show');
   renderContiList();
   renderEditorPreview();
-  updateSaveBtnState();
 };
 
 // ── 매핑 수정 모달 ──
@@ -390,24 +409,17 @@ window.saveMappingEdit = async () => {
   showToast('✅ 매핑 수정됐어요');
   renderEditorPreview();
 };
-
 window.closeMappingModal = () => document.getElementById('modal-mapping').classList.remove('show');
 
-// ── PDF/이미지 업로드 ──
+// ── 파일 업로드 ──
 window.openUploadModal = () => document.getElementById('modal-upload').classList.add('show');
 window.closeUploadModal = () => document.getElementById('modal-upload').classList.remove('show');
-
-window.onUploadHymnalChange = () => {
-  // 찬송집 변경 시 JPG 행 초기화
-  const file = document.getElementById('upload-file').files[0];
-  if (file) onUploadFileChange();
-};
 
 window.onUploadFileChange = () => {
   const file = document.getElementById('upload-file').files[0];
   if (!file) return;
-  const isJpg = file.type.startsWith('image/');
-  document.getElementById('upload-song-row').style.display = isJpg ? 'block' : 'none';
+  const isImg = file.type.startsWith('image/');
+  document.getElementById('upload-song-row').style.display = isImg ? 'block' : 'none';
 };
 
 window.uploadFile = async () => {
@@ -415,121 +427,110 @@ window.uploadFile = async () => {
   const file = document.getElementById('upload-file').files[0];
   if (!file) { alert('파일을 선택해주세요'); return; }
 
-  const isJpg = file.type.startsWith('image/');
+  const isImg = file.type.startsWith('image/');
   const songNum = document.getElementById('upload-songnum').value;
-  const songTitle = document.getElementById('upload-songtitle').value;
+  const songTitle = document.getElementById('upload-songtitle').value.trim();
   const pageNum = document.getElementById('upload-pagenum').value;
 
-  if (isJpg && (!songNum || !pageNum)) {
-    alert('곡 번호와 페이지 번호를 입력해주세요'); return;
-  }
+  if (isImg && (!songNum || !pageNum)) { alert('곡 번호와 페이지 번호를 입력해주세요'); return; }
 
   const btn = document.getElementById('btn-upload');
-  btn.disabled = true; btn.textContent = '업로드 중...';
+  btn.disabled = true; btn.textContent = '업로드 중…';
+  const fill = document.getElementById('upload-prog-fill');
+  const label = document.getElementById('upload-prog-label');
   document.getElementById('upload-progress').style.display = 'block';
-  document.getElementById('upload-prog-fill').style.width = '30%';
-  document.getElementById('upload-prog-label').textContent = '업로드 중...';
+  fill.style.width = '20%'; label.textContent = '업로드 중…';
 
   try {
-    let path;
-    if (isJpg) {
-      path = `hymnals/${hymnal}/pages/${pageNum}.jpg`;
-    } else {
-      path = `hymnals/${hymnal}/main.pdf`;
-    }
-
+    const path = isImg ? `hymnals/${hymnal}/pages/${pageNum}.jpg` : `hymnals/${hymnal}/main.pdf`;
     await uploadBytes(sRef(storage, path), file);
-    document.getElementById('upload-prog-fill').style.width = '70%';
+    fill.style.width = '70%';
 
-    // JPG인 경우 매핑에 자동 추가
-    if (isJpg && songNum) {
+    if (isImg && songNum) {
       const mapVal = parseInt(pageNum);
-      await update(ref(db, `mapping/${hymnal}`), { [songNum]: mapVal });
+      const updates = {};
+      updates[songNum] = mapVal;
+      await update(ref(db, `mapping/${hymnal}`), updates);
       mappingCache[hymnal] = mappingCache[hymnal] || {};
       mappingCache[hymnal][songNum] = mapVal;
 
-      // 제목도 저장
       if (songTitle) {
         await update(ref(db, `titles/${hymnal}`), { [songNum]: songTitle });
+        titlesCache[hymnal] = titlesCache[hymnal] || {};
+        titlesCache[hymnal][songNum] = songTitle;
       }
-      document.getElementById('upload-prog-label').textContent = '매핑 저장 완료!';
+      label.textContent = '매핑 저장 완료!';
     }
 
-    document.getElementById('upload-prog-fill').style.width = '100%';
-    delete pdfCache[hymnal];
-    setTimeout(() => {
-      showToast('✅ 업로드 완료!');
-      closeUploadModal();
-    }, 500);
+    fill.style.width = '100%';
+    setTimeout(() => { showToast('✅ 업로드 완료!'); closeUploadModal(); }, 500);
   } catch(e) {
-    logError('업로드 실패', e);
+    log('업로드 실패', e);
     alert('업로드 실패: ' + e.message);
   } finally {
     btn.disabled = false; btn.textContent = '업로드';
     document.getElementById('upload-progress').style.display = 'none';
-    document.getElementById('upload-prog-fill').style.width = '0%';
+    fill.style.width = '0%';
+    document.getElementById('upload-file').value = '';
+    document.getElementById('upload-song-row').style.display = 'none';
   }
 };
 
 // ── 사용자 관리 ──
-window.openUserModal = () => {
-  loadUserList();
-  document.getElementById('modal-users').classList.add('show');
-};
+window.openUserModal = () => { loadUserList(); document.getElementById('modal-users').classList.add('show'); };
 window.closeUserModal = () => document.getElementById('modal-users').classList.remove('show');
 
 async function loadUserList() {
   const snap = await get(ref(db, 'users'));
   const users = snap.val() || {};
-  document.getElementById('user-list').innerHTML = Object.entries(users).map(([uid, u]) => `
+  const el = document.getElementById('user-list');
+  if (!Object.keys(users).length) { el.innerHTML = '<div class="empty-conti">등록된 사용자 없음</div>'; return; }
+  el.innerHTML = Object.entries(users).map(([uid, u]) => `
     <div class="ci">
-      <div class="info"><div class="sn">${u.email||uid}</div><div class="st">${u.name||''}</div></div>
-      <select onchange="changeRole('${uid}',this.value)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 6px;font-size:.75rem">
-        <option value="member" ${u.role==='member'?'selected':''}>멤버</option>
-        <option value="admin" ${u.role==='admin'?'selected':''}>관리자</option>
+      <div class="info">
+        <div class="sn" style="font-size:.75rem">${u.email || uid}</div>
+        <div class="st">${u.name || ''}</div>
+      </div>
+      <select onchange="changeRole('${uid}',this.value)" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 6px;font-size:.75rem;flex-shrink:0">
+        <option value="member" ${u.role === 'member' ? 'selected' : ''}>멤버</option>
+        <option value="admin" ${u.role === 'admin' ? 'selected' : ''}>관리자</option>
       </select>
       <button class="btn-danger-xs" onclick="removeUser('${uid}')">삭제</button>
     </div>
-  `).join('') || '<div class="empty-conti">등록된 사용자 없음</div>';
+  `).join('');
 }
 
-window.changeRole = async (uid, role) => {
-  await update(ref(db, `users/${uid}`), { role });
-  showToast('권한 변경됐어요');
-};
-
+window.changeRole = async (uid, role) => { await update(ref(db, `users/${uid}`), { role }); showToast('권한 변경됐어요'); };
 window.removeUser = async (uid) => {
-  if (!confirm('이 사용자를 삭제할까요?')) return;
+  if (!confirm('삭제할까요?')) return;
   await remove(ref(db, `users/${uid}`));
   loadUserList();
 };
 
 window.addUserByEmail = async () => {
-  // UID를 모르므로 이메일 기반 초대 방식
-  // 실제로는 사용자가 먼저 로그인해야 UID가 생김
-  // 여기서는 이메일 화이트리스트 방식 사용
   const email = document.getElementById('invite-email').value.trim();
   if (!email) return;
   const role = document.getElementById('invite-role').value;
-  // whitelist에 저장
-  await set(ref(db, `whitelist/${btoa(email).replace(/=/g,'')}`), { email, role });
+  await set(ref(db, `whitelist/${btoa(email).replace(/=/g, '')}`), { email, role });
   document.getElementById('invite-email').value = '';
-  showToast('✅ 초대됐어요. 해당 계정으로 로그인하면 자동 승인돼요.');
+  showToast('✅ 초대 완료. 해당 계정으로 로그인하면 자동 승인돼요.');
 };
 
 // ════════════════════════════════════════
-// ── 멤버 열람 화면 ──
+// ── 멤버 열람 ──
 // ════════════════════════════════════════
 
-async function renderMemberHome() {
+function renderMemberHome() {
+  if (contiListenerOff) { contiListenerOff(); contiListenerOff = null; }
   const el = document.getElementById('member-list');
-  el.innerHTML = '<div class="loading">불러오는 중...</div>';
+  el.innerHTML = '<div class="loading">불러오는 중…</div>';
 
-  onValue(ref(db, 'contis'), snap => {
+  const dbRef = ref(db, 'contis');
+  contiListenerOff = onValue(dbRef, snap => {
     const data = snap.val() || {};
     const twoMonthsAgo = new Date();
     twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
-    const cutoff = twoMonthsAgo.toISOString().slice(0,10);
+    const cutoff = twoMonthsAgo.toISOString().slice(0, 10);
 
     const list = Object.entries(data)
       .map(([id, v]) => ({ id, ...v }))
@@ -537,15 +538,14 @@ async function renderMemberHome() {
       .sort((a, b) => b.date.localeCompare(a.date));
 
     if (!list.length) {
-      el.innerHTML = '<div class="empty-state"><div class="bi">📋</div><p>등록된 콘티가 없어요</div>';
+      el.innerHTML = '<div class="empty-state"><div class="bi">📋</div><p>아직 등록된 콘티가 없어요</p></div>';
       return;
     }
-
     el.innerHTML = list.map(c => `
       <div class="conti-card" onclick="openContiView('${c.id}')">
         <div class="cc-date">${formatDate(c.date)}</div>
-        <div class="cc-songs">${(c.songs||[]).length}곡</div>
-        <div class="cc-preview">${(c.songs||[]).slice(0,4).map(s=>`<span>${s.hymnal==='new'?'':s.hymnal.toUpperCase()+' '}${s.num}번</span>`).join('')}${(c.songs||[]).length>4?'...':''}</div>
+        <div class="cc-songs">${(c.songs || []).length}곡</div>
+        <div class="cc-preview">${(c.songs || []).slice(0, 4).map(s => `<span>${s.hymnal !== 'new' ? `[${s.hymnal.toUpperCase()}] ` : ''}${s.num}번</span>`).join('')}${(c.songs || []).length > 4 ? '<span>…</span>' : ''}</div>
       </div>
     `).join('');
   });
@@ -556,7 +556,6 @@ window.openContiView = async (id) => {
   if (!snap.exists()) return;
   const conti = snap.val();
 
-  // 모든 페이지 번호 수집
   viewPages = [];
   for (const item of (conti.songs || [])) {
     const pages = getPages(item.hymnal, item.num);
@@ -568,6 +567,7 @@ window.openContiView = async (id) => {
 
   document.getElementById('view-title').textContent = formatDate(conti.date);
   document.getElementById('view-total').textContent = viewPages.length;
+
   document.getElementById('screen-member').style.display = 'none';
   document.getElementById('screen-viewer').style.display = 'flex';
   renderViewPage();
@@ -576,18 +576,26 @@ window.openContiView = async (id) => {
 async function renderViewPage() {
   if (!viewPages.length) return;
   const { hymnal, pg, num, title } = viewPages[viewIndex];
+
   document.getElementById('view-current').textContent = viewIndex + 1;
-  document.getElementById('view-song-info').textContent = `${num}번 ${title||''}`;
+  document.getElementById('view-song-info').textContent = `${num}번${title ? ' ' + title : ''}`;
+
+  // 네비 버튼 비활성화 처리
+  document.getElementById('btn-prev').disabled = viewIndex === 0;
+  document.getElementById('btn-next').disabled = viewIndex === viewPages.length - 1;
 
   const area = document.getElementById('view-canvas-area');
-  area.innerHTML = '<div class="loading">로딩 중...</div>';
+  // 이전 ObjectURL 해제
+  area.querySelectorAll('img[data-obj-url]').forEach(img => URL.revokeObjectURL(img.dataset.objUrl));
+  area.innerHTML = '<div class="loading">악보 로딩 중…</div>';
+
   try {
-    const el = await renderPageToCanvas(hymnal, pg, window.innerWidth < 768 ? 1.2 : 1.5);
+    const imgEl = await renderPage(hymnal, pg);
+    imgEl.style.cssText = 'max-width:100%;display:block;margin:0 auto;border-radius:8px;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.4)';
     area.innerHTML = '';
-    el.style.cssText = 'max-width:100%;display:block;margin:0 auto;border-radius:8px;background:#fff';
-    area.appendChild(el);
-  } catch(e) {
-    area.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger)">${num}번 악보를 불러올 수 없어요</div>`;
+    area.appendChild(imgEl);
+  } catch {
+    area.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger)">${num}번 악보를 불러올 수 없어요<br><small>관리자에게 문의하세요</small></div>`;
   }
 }
 
@@ -595,17 +603,19 @@ window.viewPrev = () => { if (viewIndex > 0) { viewIndex--; renderViewPage(); } 
 window.viewNext = () => { if (viewIndex < viewPages.length - 1) { viewIndex++; renderViewPage(); } };
 window.closeViewer = () => {
   document.getElementById('screen-viewer').style.display = 'none';
-  document.getElementById('screen-member').style.display = 'flex';
+  if (userRole === 'admin') {
+    document.getElementById('screen-admin').style.display = 'flex';
+  } else {
+    document.getElementById('screen-member').style.display = 'flex';
+  }
 };
 
-// 스와이프
+// ── 스와이프 & 키보드 ──
 document.getElementById('screen-viewer').addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
 document.getElementById('screen-viewer').addEventListener('touchend', e => {
   const dx = e.changedTouches[0].clientX - touchStartX;
   if (Math.abs(dx) > 50) { dx < 0 ? viewNext() : viewPrev(); }
 }, { passive: true });
-
-// 키보드
 document.addEventListener('keydown', e => {
   if (document.getElementById('screen-viewer').style.display !== 'none') {
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') viewNext();
@@ -614,22 +624,19 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ── 유틸 ──
-window.openLogModal = () => {
-  document.getElementById('modal-log').classList.add('show');
-};
-window.closeLogModal = () => {
-  document.getElementById('modal-log').classList.remove('show');
-};
+// ── 로그 모달 ──
+window.openLogModal = () => document.getElementById('modal-log').classList.add('show');
+window.closeLogModal = () => document.getElementById('modal-log').classList.remove('show');
 window.copyLog = () => {
   const lines = Array.from(document.getElementById('log-content').children).map(el => el.textContent);
   navigator.clipboard.writeText(lines.join('\n')).then(() => showToast('✅ 로그 복사됨'));
 };
 
-function today() { return new Date().toISOString().slice(0,10); }
+// ── 유틸 ──
+function today() { return new Date().toISOString().slice(0, 10); }
 function formatDate(d) {
   if (!d) return '';
-  const [y,m,day] = d.split('-');
+  const [y, m, day] = d.split('-');
   return `${y}년 ${parseInt(m)}월 ${parseInt(day)}일`;
 }
 function showToast(msg) {
@@ -638,24 +645,7 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2500);
 }
 
-// ── 화이트리스트 기반 자동 승인 ──
-onAuthStateChanged(auth, async user => {
-  if (!user) return;
-  const uid = user.uid;
-  const emailKey = btoa(user.email).replace(/=/g,'');
-  const [wSnap, uSnap] = await Promise.all([
-    get(ref(db, `whitelist/${emailKey}`)),
-    get(ref(db, `users/${uid}`))
-  ]);
-  if (wSnap.exists() && !uSnap.exists()) {
-    const { role } = wSnap.val();
-    await set(ref(db, `users/${uid}`), {
-      email: user.email, name: user.displayName, role, createdAt: Date.now()
-    });
-  }
-});
-
-// 문서 클릭 시 검색 닫기
+// ── 외부 클릭 닫기 ──
 document.addEventListener('click', e => {
   if (!e.target.closest('.search-wrap')) document.getElementById('search-results')?.classList.remove('show');
   if (e.target === document.getElementById('modal-mapping')) closeMappingModal();
@@ -664,26 +654,26 @@ document.addEventListener('click', e => {
 });
 </script>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
-:root{--bg:#0f1117;--surface:#1a1d27;--surface2:#222536;--border:#2e3147;--accent:#6c8fff;--accent2:#a78bfa;--text:#e8eaf6;--muted:#7b82a8;--success:#4ade80;--danger:#f87171;--r:12px}
+:root{
+  --bg:#0f1117;--surface:#1a1d27;--surface2:#222536;--border:#2e3147;
+  --accent:#6c8fff;--accent2:#a78bfa;--text:#e8eaf6;--muted:#7b82a8;
+  --success:#4ade80;--danger:#f87171;--r:12px
+}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;overflow-x:hidden}
 
-/* 스크린 공통 */
 .screen{display:none;flex-direction:column;min-height:100vh}
 
 /* 헤더 */
 .hdr{background:linear-gradient(135deg,#1a1d27,#0f1117);border-bottom:1px solid var(--border);padding:11px 16px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:100;flex-shrink:0}
 .logo{width:30px;height:30px;background:linear-gradient(135deg,var(--accent),var(--accent2));border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:.95rem;flex-shrink:0}
 .hdr h1{font-family:'Noto Serif KR',serif;font-size:.9rem;font-weight:600}
-.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px}
-.user-name{font-size:.75rem;color:var(--muted)}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.user-name-display{font-size:.75rem;color:var(--muted)}
 
-/* 버튼 공통 */
+/* 버튼 */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:9px 14px;border-radius:8px;border:none;font-family:inherit;font-size:.83rem;font-weight:600;cursor:pointer;transition:all .2s}
 .btn:disabled{opacity:.35;cursor:not-allowed}
 .btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
@@ -694,33 +684,28 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .btn-danger-xs:hover{background:rgba(248,113,113,.3)}
 .btn-mv{background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 6px;font-size:.75rem;cursor:pointer}
 .btn-mv:hover{color:var(--text)}
-.btn-rm{width:18px;height:18px;border-radius:3px;border:none;background:rgba(248,113,113,.15);color:var(--danger);cursor:pointer;font-size:.7rem;display:flex;align-items:center;justify-content:center}
+.btn-rm{width:20px;height:20px;border-radius:4px;border:none;background:rgba(248,113,113,.15);color:var(--danger);cursor:pointer;font-size:.75rem;display:flex;align-items:center;justify-content:center}
 
-/* 로그인 화면 */
-#screen-login{align-items:center;justify-content:center;gap:24px}
+/* 로그인 */
+#screen-login{align-items:center;justify-content:center}
 .login-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:40px 32px;text-align:center;width:320px;max-width:90vw}
 .login-box h2{font-family:'Noto Serif KR',serif;font-size:1.3rem;margin-bottom:6px}
 .login-box p{color:var(--muted);font-size:.83rem;margin-bottom:28px}
 
-/* 대기 화면 */
+/* 대기 */
 #screen-waiting{align-items:center;justify-content:center}
 .waiting-box{text-align:center;padding:40px;color:var(--muted)}
 
-/* 관리자 홈 */
-.admin-body{display:grid;grid-template-columns:320px 1fr;flex:1;overflow:hidden}
+/* 관리자 레이아웃 */
+#admin-body{display:grid;grid-template-columns:300px 1fr;flex:1;overflow:hidden}
 .admin-sidebar{border-right:1px solid var(--border);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
-.admin-main{overflow-y:auto;padding:16px}
+.admin-main-area{overflow-y:auto;padding:20px;display:flex;align-items:flex-start;justify-content:center}
 
 /* 에디터 */
 #admin-editor{display:none;flex-direction:column;flex:1}
 .editor-body{display:grid;grid-template-columns:300px 1fr;flex:1;overflow:hidden}
 .editor-left{border-right:1px solid var(--border);overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px}
 .editor-right{overflow-y:auto;padding:14px}
-@media(max-width:680px){
-  .editor-body{display:flex;flex-direction:column-reverse}
-  .editor-left{border-right:none;border-top:1px solid var(--border);max-height:60vh;overflow-y:auto}
-  .editor-right{flex:1;overflow-y:auto;min-height:200px}
-}
 
 /* 콘티 카드 */
 .conti-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;cursor:pointer;transition:all .2s;margin-bottom:8px}
@@ -731,14 +716,24 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .cc-preview span{background:rgba(108,143,255,.1);color:var(--accent);padding:2px 7px;border-radius:4px;font-size:.72rem}
 .cc-actions{margin-top:8px;text-align:right}
 
-/* 카드 공통 */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:13px}
-.card-title{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:9px}
+/* 콘티 아이템 */
+.ci{display:flex;align-items:center;gap:6px;padding:7px 8px;border-radius:6px;margin-bottom:3px;background:var(--surface2)}
+.ci .ord{width:18px;height:18px;border-radius:3px;background:rgba(108,143,255,.2);color:var(--accent);font-size:.67rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ci .info{flex:1;min-width:0}
+.ci .sn{font-size:.78rem;font-weight:600}
+.ci .st{font-size:.68rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hymnal-tag{color:var(--accent2);font-size:.65rem}
+.empty-conti{text-align:center;padding:16px;color:var(--muted);font-size:.78rem}
 
-/* 찬송집 탭 */
-.htabs{display:flex;gap:4px;margin-bottom:10px}
-.htab{flex:1;padding:6px 3px;border-radius:6px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-family:inherit;font-size:.72rem;font-weight:500;cursor:pointer;text-align:center;transition:all .2s}
-.htab.active{border-color:var(--accent);color:var(--accent);background:rgba(108,143,255,.1)}
+/* 미리보기 */
+.preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.pcard{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:border .2s}
+.pcard:hover{border-color:var(--accent)}
+.pcard img{width:100%;display:block;background:#fff}
+.cf{padding:6px 8px;background:var(--surface2);border-top:1px solid var(--border);font-size:.7rem;color:var(--muted);display:flex;align-items:center;justify-content:space-between;gap:4px}
+.cf strong{color:var(--text)}
+.pg-badge{font-size:.63rem;background:rgba(108,143,255,.15);color:var(--accent);padding:1px 5px;border-radius:3px;cursor:pointer;white-space:nowrap}
+.pg-badge:hover{background:rgba(108,143,255,.3)}
 
 /* 검색 */
 .search-wrap{position:relative}
@@ -746,47 +741,31 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .search-input:focus{outline:none;border-color:var(--accent)}
 .search-input::placeholder{color:var(--muted)}
 .search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:.82rem;pointer-events:none}
-.search-results{position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:7px;max-height:180px;overflow-y:auto;z-index:50;display:none;box-shadow:0 8px 20px rgba(0,0,0,.4)}
+.search-results{position:absolute;top:calc(100% + 3px);left:0;right:0;background:var(--surface);border:1px solid var(--border);border-radius:7px;max-height:200px;overflow-y:auto;z-index:50;display:none;box-shadow:0 8px 20px rgba(0,0,0,.4)}
 .search-results.show{display:block}
 .si{display:flex;align-items:center;gap:7px;padding:8px 10px;cursor:pointer;transition:background .15s;border-bottom:1px solid var(--border)}
 .si:last-child{border-bottom:none}
 .si:hover{background:var(--surface2)}
 .si .num{background:rgba(108,143,255,.15);color:var(--accent);width:28px;height:20px;border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;flex-shrink:0}
 .si .ttl{font-size:.82rem;flex:1}
-
-/* 콘티 아이템 */
-.ci{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;margin-bottom:3px;background:var(--surface2)}
-.ci .ord{width:17px;height:17px;border-radius:3px;background:rgba(108,143,255,.2);color:var(--accent);font-size:.67rem;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.ci .info{flex:1;min-width:0}
-.ci .sn{font-size:.78rem;font-weight:600}
-.ci .st{font-size:.68rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.empty-conti{text-align:center;padding:16px;color:var(--muted);font-size:.78rem}
-
-/* 미리보기 그리드 */
-.preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
-.pcard{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:all .2s}
-.pcard:hover{border-color:var(--accent)}
-.pcard img{width:100%;display:block;background:#fff}.pcard canvas{width:100%;display:block}
-.cf{padding:6px 8px;background:var(--surface2);border-top:1px solid var(--border);font-size:.7rem;color:var(--muted);display:flex;align-items:center;justify-content:space-between}
-.cf strong{color:var(--text)}
-.pg-badge{font-size:.63rem;background:rgba(108,143,255,.15);color:var(--accent);padding:1px 5px;border-radius:3px;cursor:pointer}
-.pg-badge:hover{background:rgba(108,143,255,.3)}
+.si.muted{color:var(--muted);justify-content:center;cursor:default}
 
 /* 멤버 화면 */
+#screen-member{flex-direction:column}
 #screen-member .body{flex:1;overflow-y:auto;padding:16px;max-width:600px;margin:0 auto;width:100%}
 
 /* 뷰어 */
 #screen-viewer{background:var(--bg)}
 .viewer-hdr{background:linear-gradient(135deg,#1a1d27,#0f1117);border-bottom:1px solid var(--border);padding:10px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
 .viewer-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
-#view-canvas-area{flex:1;overflow-y:auto;padding:12px;display:flex;align-items:flex-start;justify-content:center}
+#view-canvas-area{flex:1;overflow-y:auto;padding:16px;display:flex;align-items:flex-start;justify-content:center;background:var(--bg)}
 .viewer-nav{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0}
 .nav-info{text-align:center;flex:1}
 .nav-info .page-num{font-size:.9rem;font-weight:600}
 .nav-info .song-info{font-size:.72rem;color:var(--muted);margin-top:2px}
-.nav-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:1.2rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
-.nav-btn:hover{border-color:var(--accent);color:var(--accent)}
-.nav-btn:disabled{opacity:.3;cursor:not-allowed}
+.nav-btn{width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--surface2);color:var(--text);font-size:1.4rem;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s}
+.nav-btn:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+.nav-btn:disabled{opacity:.25;cursor:not-allowed}
 
 /* 모달 */
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;display:none;align-items:center;justify-content:center;padding:20px}
@@ -795,9 +774,9 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .modal h3{font-size:.9rem;font-weight:600;margin-bottom:12px}
 .modal input,.modal select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 10px;color:var(--text);font-family:inherit;font-size:.87rem;margin-bottom:8px}
 .modal input:focus,.modal select:focus{outline:none;border-color:var(--accent)}
-.modal-hint{font-size:.72rem;color:var(--muted);margin-bottom:10px}
-.modal-btns{display:flex;gap:6px}
-.modal-btns button{flex:1;padding:8px;border-radius:6px;border:none;font-family:inherit;font-size:.82rem;font-weight:600;cursor:pointer}
+.modal-hint{font-size:.72rem;color:var(--muted);margin-bottom:8px;line-height:1.5}
+.modal-btns{display:flex;gap:6px;margin-top:4px}
+.modal-btns button{flex:1;padding:9px;border-radius:6px;border:none;font-family:inherit;font-size:.82rem;font-weight:600;cursor:pointer}
 .modal-btns .ok{background:var(--accent);color:#fff}
 .modal-btns .cancel{background:var(--surface2);border:1px solid var(--border);color:var(--muted)}
 
@@ -807,7 +786,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
 /* 공통 */
 .loading{text-align:center;padding:40px;color:var(--muted);font-size:.85rem}
-.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;height:200px;color:var(--muted);gap:8px;text-align:center}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:160px;color:var(--muted);gap:8px;text-align:center}
 .empty-state .bi{font-size:2.5rem;opacity:.3}
 .empty-state p{font-size:.83rem;line-height:1.7}
 .section-title{font-size:.7rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
@@ -816,13 +795,15 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .conti-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .cc-badge{background:var(--accent);color:#fff;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:20px}
 
-/* 모바일 */
+/* 반응형 */
 @media(max-width:680px){
-  .admin-body{grid-template-columns:1fr}
-  .admin-sidebar{border-right:none;border-bottom:1px solid var(--border)}
+  #admin-body{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .admin-sidebar{border-right:none;border-bottom:1px solid var(--border);max-height:50vh}
   .editor-body{grid-template-columns:1fr}
   .editor-left{border-right:none;border-bottom:1px solid var(--border)}
   .preview-grid{grid-template-columns:repeat(2,1fr)}
+  .hdr-right{gap:4px}
+  .hdr-right .btn-ghost{padding:5px 8px;font-size:.72rem}
 }
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
@@ -830,7 +811,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 </head>
 <body>
 
-<!-- ── 로그인 화면 ── -->
+<!-- ── 로그인 ── -->
 <div class="screen" id="screen-login">
   <div class="login-box">
     <div style="font-size:2.5rem;margin-bottom:12px">🎵</div>
@@ -843,17 +824,17 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   </div>
 </div>
 
-<!-- ── 대기 화면 ── -->
+<!-- ── 대기 ── -->
 <div class="screen" id="screen-waiting">
   <div class="waiting-box">
     <div style="font-size:3rem;margin-bottom:16px">⏳</div>
     <p style="font-size:.95rem;font-weight:600;margin-bottom:8px">승인 대기 중</p>
-    <p style="font-size:.82rem;line-height:1.7">관리자가 접근 권한을 부여하면<br>이용할 수 있어요</p>
-    <button class="btn btn-ghost" style="margin-top:20px" onclick="doLogout()">로그아웃</button>
+    <p style="font-size:.82rem;line-height:1.7;margin-bottom:20px">관리자가 접근 권한을 부여하면<br>이용할 수 있어요</p>
+    <button class="btn btn-ghost" onclick="doLogout()">로그아웃</button>
   </div>
 </div>
 
-<!-- ── 관리자 화면 ── -->
+<!-- ── 관리자 ── -->
 <div class="screen" id="screen-admin">
   <div class="hdr">
     <div class="logo">🎵</div>
@@ -861,62 +842,58 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <div class="hdr-right">
       <button class="btn btn-ghost" onclick="openUploadModal()">📤 업로드</button>
       <button class="btn btn-ghost" onclick="openUserModal()">👥 멤버</button>
-      <button class="btn btn-ghost" onclick="openLogModal()" style="color:var(--danger)" id="btn-log">🔴 로그</button>
-      <span class="user-name" id="admin-user-name"></span>
+      <button class="btn btn-ghost" onclick="openLogModal()" id="btn-log">🔴 로그</button>
+      <span class="user-name-display"></span>
       <button class="btn btn-ghost" onclick="doLogout()">로그아웃</button>
     </div>
   </div>
 
-  <!-- 홈: 콘티 목록 -->
-  <div class="admin-body" style="flex:1">
+  <!-- 홈 (콘티 목록) -->
+  <div id="admin-body" style="flex:1">
     <div class="admin-sidebar">
       <div class="section-title">📋 콘티 목록</div>
       <button class="btn btn-primary" onclick="openContiEdit('new')">＋ 새 콘티 만들기</button>
       <div id="admin-content"></div>
     </div>
-    <div class="admin-main" id="admin-right-area">
-      <div class="empty-state" style="height:60vh">
+    <div class="admin-main-area">
+      <div class="empty-state" style="margin-top:60px">
         <div class="bi">👈</div>
         <p>왼쪽에서 콘티를 선택하거나<br>새로 만들어보세요</p>
       </div>
     </div>
   </div>
 
-  <!-- 에디터 -->
-  <div id="admin-editor" style="flex:1">
+  <!-- 에디터 (admin-body와 형제 관계, 전체 화면 교체) -->
+  <div id="admin-editor" style="flex:1;display:none">
     <div class="hdr" style="position:relative">
       <button class="btn btn-ghost" onclick="closeEditor()">← 목록</button>
       <h1 style="flex:1;text-align:center">콘티 편집</h1>
       <button class="btn btn-primary" id="btn-save" onclick="saveConti()">저장</button>
     </div>
     <div class="editor-body" style="flex:1">
-      <!-- 좌측: 콘티 구성 -->
+      <!-- 좌측: 구성 -->
       <div class="editor-left">
         <div>
           <div class="section-title">📅 날짜</div>
           <input type="date" class="date-input" id="editor-date">
         </div>
-
         <div>
           <div class="section-title">🔍 곡 추가</div>
-          <div style="margin-bottom:6px">
-            <select id="hymnal-select" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-family:inherit;font-size:.82rem;margin-bottom:6px">
-              <option value="new">새찬송가</option>
-              <option value="old">구찬송가</option>
-              <option value="ccm">CCM</option>
-            </select>
-          </div>
+          <select id="hymnal-select" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 9px;color:var(--text);font-family:inherit;font-size:.82rem;margin-bottom:6px">
+            <option value="new">새찬송가</option>
+            <option value="old">구찬송가</option>
+            <option value="ccm">CCM</option>
+          </select>
           <div class="search-wrap">
             <span class="search-icon">🔍</span>
             <input type="text" class="search-input" id="search-input"
-              placeholder="번호 또는 제목 검색..."
+              placeholder="번호 또는 제목 검색…"
               autocomplete="off"
               oninput="onSearch(this.value)"
-              onkeydown="if(event.key==='Escape')document.getElementById('search-results').classList.remove('show');if(event.key==='Enter'){const f=document.querySelector('.si');if(f)f.click();}">
+              onkeydown="if(event.key==='Escape')document.getElementById('search-results').classList.remove('show');if(event.key==='Enter'){const f=document.querySelector('#search-results .si:not(.muted)');if(f)f.click();}">
             <div class="search-results" id="search-results"></div>
           </div>
         </div>
-
         <div style="flex:1">
           <div class="conti-header">
             <div class="section-title" style="margin-bottom:0">🎼 순서</div>
@@ -928,7 +905,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 
       <!-- 우측: 미리보기 -->
       <div class="editor-right">
-        <div class="section-title">👁 미리보기</div>
+        <div class="section-title">👁 악보 미리보기</div>
         <div class="preview-grid" id="editor-preview">
           <div class="empty-state"><div class="bi">🎶</div><p>곡을 추가하면<br>악보가 표시돼요</p></div>
         </div>
@@ -937,13 +914,13 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   </div>
 </div>
 
-<!-- ── 멤버 화면 ── -->
+<!-- ── 멤버 ── -->
 <div class="screen" id="screen-member">
   <div class="hdr">
     <div class="logo">🎵</div>
     <h1>찬양 콘티</h1>
     <div class="hdr-right">
-      <span class="user-name" id="member-user-name"></span>
+      <span class="user-name-display"></span>
       <button class="btn btn-ghost" onclick="doLogout()">로그아웃</button>
     </div>
   </div>
@@ -953,7 +930,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   </div>
 </div>
 
-<!-- ── 악보 뷰어 ── -->
+<!-- ── 뷰어 ── -->
 <div class="screen" id="screen-viewer">
   <div class="viewer-hdr">
     <button class="btn btn-ghost" onclick="closeViewer()">← 목록</button>
@@ -978,7 +955,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <h3 id="map-title">페이지 수정</h3>
     <input type="hidden" id="map-hymnal">
     <input type="hidden" id="map-songnum">
-    <p class="modal-hint">PDF 페이지 번호 입력 (2쪽짜리는 쉼표로 구분: 27,28)</p>
+    <p class="modal-hint">PDF 페이지 번호 입력<br>2쪽짜리는 쉼표 구분: <strong>27,28</strong></p>
     <input type="text" id="map-pages" placeholder="예: 27 또는 27,28">
     <div class="modal-btns">
       <button class="ok" onclick="saveMappingEdit()">저장</button>
@@ -987,42 +964,32 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   </div>
 </div>
 
-<!-- ── 파일 업로드 모달 ── -->
+<!-- ── 업로드 모달 ── -->
 <div class="modal-bg" id="modal-upload">
   <div class="modal" style="width:360px">
     <h3>파일 업로드</h3>
-
-    <!-- 찬송집 선택 -->
     <p class="modal-hint">찬송집 선택</p>
-    <select id="upload-hymnal" onchange="onUploadHymnalChange()">
+    <select id="upload-hymnal">
       <option value="new">새찬송가</option>
       <option value="old">구찬송가</option>
       <option value="ccm">CCM</option>
     </select>
-
-    <!-- 파일 선택 -->
-    <p class="modal-hint" style="margin-top:6px">파일 선택 (PDF 또는 JPG)</p>
+    <p class="modal-hint">파일 선택 (PDF 또는 JPG/PNG)</p>
     <input type="file" id="upload-file" accept=".pdf,.jpg,.jpeg,.png" onchange="onUploadFileChange()">
-
-    <!-- JPG 전용: 곡 정보 입력 -->
     <div id="upload-song-row" style="display:none;margin-top:8px">
-      <p class="modal-hint">곡 번호와 제목 입력 (매핑에 자동 추가됩니다)</p>
-      <div style="display:flex;gap:6px">
-        <input type="number" id="upload-songnum" placeholder="곡 번호" min="1" style="width:100px;margin:0">
-        <input type="text" id="upload-songtitle" placeholder="곡 제목" style="flex:1;margin:0">
+      <p class="modal-hint">곡 번호 · 제목 · 페이지 번호</p>
+      <div style="display:flex;gap:6px;margin-bottom:6px">
+        <input type="number" id="upload-songnum" placeholder="곡 번호" min="1" style="width:90px;margin:0">
+        <input type="text" id="upload-songtitle" placeholder="제목 (선택)" style="flex:1;margin:0">
       </div>
-      <p class="modal-hint" style="margin-top:4px">PDF 페이지 번호</p>
-      <input type="number" id="upload-pagenum" placeholder="페이지 번호" min="1" style="margin:0">
+      <input type="number" id="upload-pagenum" placeholder="PDF 페이지 번호" min="1" style="margin:0">
     </div>
-
-    <!-- 진행바 -->
-    <div id="upload-progress" style="display:none;margin-top:8px">
+    <div id="upload-progress" style="display:none;margin-top:10px">
       <div style="background:var(--border);border-radius:2px;height:3px">
         <div id="upload-prog-fill" style="background:var(--accent);height:100%;border-radius:2px;width:0%;transition:width .3s"></div>
       </div>
       <p class="modal-hint" style="margin-top:4px;text-align:center" id="upload-prog-label"></p>
     </div>
-
     <div class="modal-btns" style="margin-top:10px">
       <button class="ok" id="btn-upload" onclick="uploadFile()">업로드</button>
       <button class="cancel" onclick="closeUploadModal()">취소</button>
@@ -1037,29 +1004,26 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <p class="modal-hint">Google 계정 이메일로 초대하세요</p>
     <div style="display:flex;gap:6px;margin-bottom:12px">
       <input type="email" id="invite-email" placeholder="이메일 주소" style="flex:1;margin:0">
-      <select id="invite-role" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-family:inherit;font-size:.82rem">
+      <select id="invite-role" style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-family:inherit;font-size:.82rem;width:auto">
         <option value="member">멤버</option>
         <option value="admin">관리자</option>
       </select>
-      <button class="btn btn-primary" style="padding:8px 12px" onclick="addUserByEmail()">초대</button>
+      <button class="btn btn-primary" style="padding:8px 12px;white-space:nowrap" onclick="addUserByEmail()">초대</button>
     </div>
-    <div id="user-list"></div>
+    <div id="user-list" style="max-height:240px;overflow-y:auto"></div>
     <div style="margin-top:12px;text-align:right">
       <button class="btn btn-ghost" onclick="closeUserModal()">닫기</button>
     </div>
   </div>
 </div>
 
-<!-- 토스트 -->
-<div id="toast"></div>
-
-<!-- 로그 모달 -->
+<!-- ── 로그 모달 ── -->
 <div class="modal-bg" id="modal-log">
   <div class="modal" style="width:500px;max-height:80vh;display:flex;flex-direction:column">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
       <h3 style="margin:0">🔴 실행 로그</h3>
       <div style="display:flex;gap:6px">
-        <button onclick="copyLog()" style="background:rgba(108,143,255,.15);color:var(--accent);border:none;border-radius:6px;padding:5px 10px;font-size:.75rem;cursor:pointer">📋 전체 복사</button>
+        <button onclick="copyLog()" style="background:rgba(108,143,255,.15);color:var(--accent);border:none;border-radius:6px;padding:5px 10px;font-size:.75rem;cursor:pointer">복사</button>
         <button onclick="document.getElementById('log-content').innerHTML='';logCount=0;document.getElementById('btn-log').textContent='🔴 로그'" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:5px 10px;font-size:.75rem;cursor:pointer">지우기</button>
         <button onclick="closeLogModal()" style="background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:5px 10px;font-size:.75rem;cursor:pointer">닫기</button>
       </div>
@@ -1068,6 +1032,6 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   </div>
 </div>
 
-
+<div id="toast"></div>
 </body>
 </html>

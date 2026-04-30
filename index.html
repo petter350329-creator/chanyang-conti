@@ -145,59 +145,26 @@ async function loadPdf(hymnal) {
   }
 }
 
-// ── 페이지 렌더링 (JPG fetch→blob 방식) ──
+// ── 페이지 렌더링 (img 태그 방식) ──
 async function renderPageToCanvas(hymnal, pageNum, scale) {
   try {
     const url = await getDownloadURL(sRef(storage, `hymnals/${hymnal}/pages/${pageNum}.jpg`));
     logError('JPG URL', `p${pageNum} ok`);
-
-    // fetch로 blob 받기 (CORS 우회, 인증 포함)
     const resp = await fetch(url, { mode: 'cors' });
-    if (!resp.ok) throw new Error(`fetch 실패: HTTP ${resp.status}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
-    logError('JPG blob', `p${pageNum} size=${blob.size} type=${blob.type}`);
-
-    if (blob.size < 100) throw new Error('blob 너무 작음 (비어있음)');
-
+    logError('JPG blob', `p${pageNum} size=${blob.size}`);
     const objUrl = URL.createObjectURL(blob);
-    return await new Promise((res, rej) => {
-      const img = new Image();
-      img.onload = () => {
-        const w = img.naturalWidth || 800;
-        const h = img.naturalHeight || 1100;
-        const canvas = document.createElement('canvas');
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        URL.revokeObjectURL(objUrl);
-        logError('렌더 완료', `p${pageNum} ${w}x${h}`);
-        res(canvas);
-      };
-      img.onerror = (e) => {
-        URL.revokeObjectURL(objUrl);
-        rej(new Error('img.onerror: objectURL 로드 실패'));
-      };
-      img.src = objUrl;
-    });
+    // img 태그 반환 (canvas 대신)
+    const img = document.createElement('img');
+    img.src = objUrl;
+    img.style.cssText = 'width:100%;display:block;background:#fff';
+    img.dataset.objUrl = objUrl;
+    logError('렌더 완료', `p${pageNum}`);
+    return img;
   } catch(e) {
     logError('JPG 실패', `p${pageNum}: ${e.message}`);
-    // PDF fallback
-    try {
-      const pdf = await loadPdf(hymnal);
-      if (!pdf) throw new Error('PDF 없음');
-      const page = await pdf.getPage(pageNum);
-      const vp = page.getViewport({ scale: scale || 1.2 });
-      const canvas = document.createElement('canvas');
-      canvas.width = vp.width; canvas.height = vp.height;
-      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-      return canvas;
-    } catch(e2) {
-      logError('PDF fallback 실패', `p${pageNum}: ${e2.message}`);
-      throw e2;
-    }
+    throw e;
   }
 }
 
@@ -307,11 +274,14 @@ async function renderEditorPreview() {
     if (!pages) { addErrCard(grid, item, '매핑 없음'); continue; }
     for (const pgN of pages) {
       try {
-        const canvas = await renderPageToCanvas(item.hymnal, pgN, 0.8);
+        const el = await renderPageToCanvas(item.hymnal, pgN, 0.8);
         const card = document.createElement('div');
         card.className = 'pcard';
-        card.appendChild(canvas);
-        card.innerHTML += `<div class="cf"><strong>${item.num}번</strong> ${(item.title||'').slice(0,10)} <span class="pg-badge" onclick="openMappingModal('${item.hymnal}',${item.num})">${pages.length>1?`p.${pages[0]}-${pages[pages.length-1]}`:`p.${pgN}`}</span></div>`;
+        card.appendChild(el);
+        const cf = document.createElement('div');
+        cf.className = 'cf';
+        cf.innerHTML = `<strong>${item.num}번</strong> ${(item.title||'').slice(0,10)} <span class="pg-badge" onclick="openMappingModal('${item.hymnal}',${item.num})">${pages.length>1?`p.${pages[0]}-${pages[pages.length-1]}`:`p.${pgN}`}</span>`;
+        card.appendChild(cf);
         grid.appendChild(card);
       } catch(e) { addErrCard(grid, item, 'PDF 미업로드'); }
     }
@@ -607,10 +577,10 @@ async function renderViewPage() {
   const area = document.getElementById('view-canvas-area');
   area.innerHTML = '<div class="loading">로딩 중...</div>';
   try {
-    const canvas = await renderPageToCanvas(hymnal, pg, window.innerWidth < 768 ? 1.2 : 1.5);
+    const el = await renderPageToCanvas(hymnal, pg, window.innerWidth < 768 ? 1.2 : 1.5);
     area.innerHTML = '';
-    canvas.style.cssText = 'max-width:100%;display:block;margin:0 auto;border-radius:8px';
-    area.appendChild(canvas);
+    el.style.cssText = 'max-width:100%;display:block;margin:0 auto;border-radius:8px;background:#fff';
+    area.appendChild(el);
   } catch(e) {
     area.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger)">${num}번 악보를 불러올 수 없어요</div>`;
   }
@@ -780,7 +750,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 .preview-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
 .pcard{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;transition:all .2s}
 .pcard:hover{border-color:var(--accent)}
-.pcard canvas{width:100%;display:block}
+.pcard img{width:100%;display:block;background:#fff}.pcard canvas{width:100%;display:block}
 .cf{padding:6px 8px;background:var(--surface2);border-top:1px solid var(--border);font-size:.7rem;color:var(--muted);display:flex;align-items:center;justify-content:space-between}
 .cf strong{color:var(--text)}
 .pg-badge{font-size:.63rem;background:rgba(108,143,255,.15);color:var(--accent);padding:1px 5px;border-radius:3px;cursor:pointer}

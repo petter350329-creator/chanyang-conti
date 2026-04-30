@@ -622,10 +622,8 @@ window.closeLogModal = () => {
   document.getElementById('modal-log').classList.remove('show');
 };
 window.copyLog = () => {
-  const text = Array.from(document.getElementById('log-content').children)
-    .map(el => el.textContent).join('
-');
-  navigator.clipboard.writeText(text).then(() => showToast('✅ 로그 복사됨'));
+  const lines = Array.from(document.getElementById('log-content').children).map(el => el.textContent);
+  navigator.clipboard.writeText(lines.join('\n')).then(() => showToast('✅ 로그 복사됨'));
 };
 
 function today() { return new Date().toISOString().slice(0,10); }

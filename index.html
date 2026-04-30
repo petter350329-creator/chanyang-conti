@@ -145,43 +145,59 @@ async function loadPdf(hymnal) {
   }
 }
 
-// ── 페이지 렌더링 (JPG 우선) ──
+// ── 페이지 렌더링 (JPG fetch→blob 방식) ──
 async function renderPageToCanvas(hymnal, pageNum, scale) {
-  // JPG 방식 우선 시도
   try {
     const url = await getDownloadURL(sRef(storage, `hymnals/${hymnal}/pages/${pageNum}.jpg`));
+    logError('JPG URL', `p${pageNum} ok`);
+
+    // fetch로 blob 받기 (CORS 우회, 인증 포함)
+    const resp = await fetch(url, { mode: 'cors' });
+    if (!resp.ok) throw new Error(`fetch 실패: HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    logError('JPG blob', `p${pageNum} size=${blob.size} type=${blob.type}`);
+
+    if (blob.size < 100) throw new Error('blob 너무 작음 (비어있음)');
+
+    const objUrl = URL.createObjectURL(blob);
     return await new Promise((res, rej) => {
       const img = new Image();
       img.onload = () => {
+        const w = img.naturalWidth || 800;
+        const h = img.naturalHeight || 1100;
         const canvas = document.createElement('canvas');
-        const w = img.naturalWidth || img.width;
-        const h = img.naturalHeight || img.height;
         canvas.width = w;
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0);
+        ctx.drawImage(img, 0, 0, w, h);
+        URL.revokeObjectURL(objUrl);
+        logError('렌더 완료', `p${pageNum} ${w}x${h}`);
         res(canvas);
       };
       img.onerror = (e) => {
-        logError('이미지 로드 오류', `${hymnal} p${pageNum}`);
-        rej(e);
+        URL.revokeObjectURL(objUrl);
+        rej(new Error('img.onerror: objectURL 로드 실패'));
       };
-      // crossOrigin 없이 직접 로드
-      img.src = url;
+      img.src = objUrl;
     });
   } catch(e) {
-    logError('JPG 로드 실패, PDF 시도', `${hymnal} p${pageNum}`);
-    // PDF 방식 fallback
-    const pdf = await loadPdf(hymnal);
-    if (!pdf) throw new Error('PDF도 없음');
-    const page = await pdf.getPage(pageNum);
-    const vp = page.getViewport({ scale });
-    const canvas = document.createElement('canvas');
-    canvas.width = vp.width; canvas.height = vp.height;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-    return canvas;
+    logError('JPG 실패', `p${pageNum}: ${e.message}`);
+    // PDF fallback
+    try {
+      const pdf = await loadPdf(hymnal);
+      if (!pdf) throw new Error('PDF 없음');
+      const page = await pdf.getPage(pageNum);
+      const vp = page.getViewport({ scale: scale || 1.2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = vp.width; canvas.height = vp.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+      return canvas;
+    } catch(e2) {
+      logError('PDF fallback 실패', `p${pageNum}: ${e2.message}`);
+      throw e2;
+    }
   }
 }
 
@@ -624,6 +640,11 @@ document.addEventListener('keydown', e => {
 });
 
 // ── 유틸 ──
+window.toggleErrorPanel = () => {
+  const p = document.getElementById('error-panel');
+  p.style.display = p.style.display === 'none' || p.style.display === '' ? 'block' : 'none';
+};
+
 function today() { return new Date().toISOString().slice(0,10); }
 function formatDate(d) {
   if (!d) return '';
@@ -854,6 +875,7 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
     <div class="hdr-right">
       <button class="btn btn-ghost" onclick="openUploadModal()">📤 업로드</button>
       <button class="btn btn-ghost" onclick="openUserModal()">👥 멤버</button>
+      <button class="btn btn-ghost" onclick="toggleErrorPanel()" style="color:var(--danger)">🔴 로그</button>
       <span class="user-name" id="admin-user-name"></span>
       <button class="btn btn-ghost" onclick="doLogout()">로그아웃</button>
     </div>

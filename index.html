@@ -255,11 +255,12 @@ function doScoreSearch(q){
   if(!items.length&&!isNaN(qn)&&qn>=1) items.push({num:qn,title:`${qn}장`});
   if(!items.length){res.innerHTML='<div class="score-hint">결과 없음</div>';return;}
   res.innerHTML=items.map(it=>`
-    <div class="score-result-item" onclick="openScoreViewer('${hymnal}',${it.num},'${(it.title||'').replace(/'/g,"\\'")}')">
-      <span class="htag htag-${hymnal}">${hymnalTag(hymnal)}</span>
+    <div class="score-result-item">
+      <span class="htag htag-${hymnal}" style="flex-shrink:0">${hymnalTag(hymnal)}</span>
       <span class="score-item-num">${it.num}장</span>
-      <span class="score-item-title">${it.title}</span>
-      <span class="score-item-arrow">›</span>
+      <span class="score-item-title" onclick="openScoreViewer('${hymnal}',${it.num},'${(it.title||'').replace(/'/g,"\\'")}')">${it.title}</span>
+      ${isAdmin()?`<button class="btn-xs" style="flex-shrink:0;font-size:.68rem" onclick="openMappingModal('${hymnal}',${it.num})">매핑</button>`:''}
+      <span class="score-item-arrow" onclick="openScoreViewer('${hymnal}',${it.num},'${(it.title||'').replace(/'/g,"\\'")}')">›</span>
     </div>`).join('');
 }
 

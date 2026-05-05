@@ -274,6 +274,7 @@ window.openScoreViewer=async(hymnal,num,title)=>{
   document.getElementById('view-conti-title').textContent=`${title||num+'장'} · ${hymnalTag(hymnal)}`;
   document.getElementById('view-total').textContent=viewSlides.length;
   document.getElementById('btn-viewer-edit').style.display='none';
+  document.getElementById('btn-viewer-mapping').style.display=isAdmin()?'inline-flex':'none';
   document.getElementById('comment-section').style.display='none';
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('screen-viewer').style.display='flex';
@@ -309,6 +310,7 @@ window.openContiViewer=async(id)=>{
   document.getElementById('view-conti-title').textContent=`${formatDate(conti.date)}${conti.type?' '+conti.type:''}${conti.leader?' · '+conti.leader:''}`;
   document.getElementById('view-total').textContent=viewSlides.length;
   document.getElementById('btn-viewer-edit').style.display=isAdmin()?'inline-flex':'none';
+  document.getElementById('btn-viewer-mapping').style.display=isAdmin()?'inline-flex':'none';
   document.getElementById('comment-section').style.display='';
   document.querySelectorAll('.screen').forEach(s=>s.style.display='none');
   document.getElementById('screen-viewer').style.display='flex';
@@ -371,6 +373,11 @@ window.closeViewer=()=>{
   if(currentTab==='conti') initContiTab();
 };
 window.viewerGoEdit=()=>{closeViewer();openContiEdit(viewContiId);};
+window.openCurrentMapping=()=>{
+  if(!viewSlides.length)return;
+  const p=viewSlides[slideIndex][0];
+  openMappingModal(p.hymnal,p.num);
+};
 
 // ── 오디오 플레이어 ──
 async function loadAudio(hymnal,num,title){
@@ -850,7 +857,182 @@ document.addEventListener('click',e=>{
   if(e.target===document.getElementById('modal-mapping'))closeMappingModal();
   if(e.target===document.getElementById('modal-upload'))closeUploadModal();
   if(e.target===document.getElementById('modal-users'))closeUserModal();
+  if(e.target===document.getElementById('modal-fm-preview'))closeFmPreview();
 });
+
+// ════════════════════════
+// ── 악보 업로드 도구 ──
+// ════════════════════════
+let fmFiles=[];
+
+window.openFileManager=()=>{
+  fmFiles=[];
+  document.getElementById('fm-hymnal').value='new';
+  document.getElementById('fm-upload-btn').disabled=false;
+  document.getElementById('fm-upload-btn').textContent='전체 업로드';
+  renderFmList();
+  showScreen('filemanager');
+};
+
+window.closeFmScreen=()=>{
+  fmFiles.forEach(f=>{if(f.objUrl)URL.revokeObjectURL(f.objUrl);});
+  fmFiles=[];
+  showScreen('main');
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-settings').classList.add('active');
+  document.querySelector('.tab-btn[data-tab="settings"]').classList.add('active');
+  currentTab='settings';
+};
+
+window.onFmHymnalChange=()=>renderFmList();
+
+window.onFmFilesSelected=(input)=>{
+  const files=Array.from(input.files).sort((a,b)=>a.name.localeCompare(b.name));
+  files.forEach(f=>fmFiles.push({file:f,suffix:'',objUrl:URL.createObjectURL(f),status:'pending'}));
+  input.value='';
+  renderFmList();
+};
+
+function fmPrefix(){
+  const h=document.getElementById('fm-hymnal').value;
+  return h==='new'?'새':h==='old'?'구':'';
+}
+
+function renderFmList(){
+  const hymnal=document.getElementById('fm-hymnal').value;
+  const prefix=fmPrefix();
+  const isCcm=hymnal==='ccm';
+  const el=document.getElementById('fm-list');
+  if(!fmFiles.length){
+    el.innerHTML='<div class="fm-empty">파일을 선택하면 여기에 표시돼요<br><span class="muted-sm">여러 파일 동시 선택 가능</span></div>';
+    return;
+  }
+  el.innerHTML=fmFiles.map((pf,i)=>{
+    const key=pf.suffix.trim()?(prefix+pf.suffix.trim()):'';
+    const preview=key?`→ <strong>${key}.jpg</strong>`:'<span style="color:var(--muted)">이름을 입력하세요</span>';
+    const statusHtml=pf.status==='done'?'<span class="fm-status done">✅</span>':pf.status==='error'?'<span class="fm-status error">❌</span>':'';
+    return`<div class="fm-item ${pf.status}" id="fm-item-${i}">
+      <img src="${pf.objUrl}" class="fm-thumb" onclick="openFmPreview(${i})" title="클릭하면 크게 볼 수 있어요">
+      <div class="fm-item-info">
+        <div class="fm-orig-name">${pf.file.name}</div>
+        <div class="fm-name-row">
+          ${prefix?`<span class="fm-prefix-badge">${prefix}</span>`:''}
+          <input type="text" class="fm-name-input" id="fm-input-${i}"
+            value="${pf.suffix}"
+            placeholder="${isCcm?'제목 (예: 주님의사랑)':'023  또는  134-1'}"
+            oninput="fmFiles[${i}].suffix=this.value;updateFmPreview(${i})">
+        </div>
+        <div class="fm-preview-name" id="fm-prev-${i}">${preview}</div>
+      </div>
+      <div class="fm-item-actions">
+        ${statusHtml}
+        <button class="btn-danger-xs" onclick="removeFmFile(${i})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.updateFmPreview=(i)=>{
+  const hymnal=document.getElementById('fm-hymnal').value;
+  const prefix=fmPrefix();
+  const suffix=fmFiles[i].suffix.trim();
+  const key=suffix?(prefix+suffix):'';
+  const el=document.getElementById(`fm-prev-${i}`);
+  if(el) el.innerHTML=key?`→ <strong>${key}.jpg</strong>`:'<span style="color:var(--muted)">이름을 입력하세요</span>';
+};
+
+window.removeFmFile=(i)=>{
+  URL.revokeObjectURL(fmFiles[i].objUrl);
+  fmFiles.splice(i,1);
+  renderFmList();
+};
+
+window.openFmPreview=(i)=>{
+  document.getElementById('fm-preview-img').src=fmFiles[i].objUrl;
+  document.getElementById('modal-fm-preview').classList.add('show');
+};
+window.closeFmPreview=()=>document.getElementById('modal-fm-preview').classList.remove('show');
+
+window.uploadFmAll=async()=>{
+  const hymnal=document.getElementById('fm-hymnal').value;
+  const prefix=fmPrefix();
+  const isCcm=hymnal==='ccm';
+
+  const empty=fmFiles.filter(f=>!f.suffix.trim());
+  if(empty.length){alert(`이름이 없는 파일이 ${empty.length}개 있어요`);return;}
+
+  const btn=document.getElementById('fm-upload-btn');
+  btn.disabled=true;btn.textContent='업로드 중…';
+
+  // 같은 곡번호 그룹핑 (멀티페이지 처리용)
+  const songGroups={};
+  if(!isCcm){
+    fmFiles.forEach(pf=>{
+      const suffix=pf.suffix.trim();
+      const dashIdx=suffix.lastIndexOf('-');
+      const songNum=dashIdx>0?parseInt(suffix.substring(0,dashIdx)):parseInt(suffix);
+      if(!isNaN(songNum)){
+        if(!songGroups[songNum])songGroups[songNum]=[];
+        songGroups[songNum].push(prefix+suffix);
+      }
+    });
+  }
+
+  let success=0,fail=0;
+
+  for(let i=0;i<fmFiles.length;i++){
+    const pf=fmFiles[i];
+    const suffix=pf.suffix.trim();
+    const key=prefix+suffix;
+
+    try{
+      // 1. Storage 업로드
+      await uploadBytes(sRef(storage,`hymnals/${hymnal}/pages/${key}.jpg`),pf.file);
+
+      // 2. 매핑 + 제목 DB 업로드
+      if(isCcm){
+        const snap=await get(ref(db,'mapping/ccm'));
+        const existing=snap.val()||{};
+        const songNum=Object.keys(existing).length>0?Math.max(...Object.keys(existing).map(Number))+1:1;
+        await update(ref(db,'mapping/ccm'),{[songNum]:key});
+        await update(ref(db,'titles/ccm'),{[songNum]:suffix});
+        mappingCache.ccm=mappingCache.ccm||{};mappingCache.ccm[songNum]=key;
+        titlesCache.ccm=titlesCache.ccm||{};titlesCache.ccm[songNum]=suffix;
+      } else {
+        const dashIdx=suffix.lastIndexOf('-');
+        const songNum=dashIdx>0?parseInt(suffix.substring(0,dashIdx)):parseInt(suffix);
+        if(!isNaN(songNum)){
+          const group=songGroups[songNum]||[];
+          // 페이지 순서 정렬
+          const sorted=group.slice().sort((a,b)=>{
+            const ai=a.lastIndexOf('-'),bi=b.lastIndexOf('-');
+            return(ai>0?parseInt(a.substring(ai+1)):0)-(bi>0?parseInt(b.substring(bi+1)):0);
+          });
+          const val=sorted.length===1?sorted[0]:sorted;
+          await update(ref(db,`mapping/${hymnal}`),{[songNum]:val});
+          mappingCache[hymnal]=mappingCache[hymnal]||{};mappingCache[hymnal][songNum]=val;
+        }
+      }
+
+      pf.status='done';success++;
+    } catch(e){
+      pf.status='error';fail++;
+      console.error(key,e);
+    }
+
+    // 개별 항목 상태 업데이트
+    const item=document.getElementById(`fm-item-${i}`);
+    if(item){
+      item.className=`fm-item ${pf.status}`;
+      const actEl=item.querySelector('.fm-item-actions');
+      if(actEl) actEl.innerHTML=`<span class="fm-status ${pf.status}">${pf.status==='done'?'✅':'❌'}</span>`;
+    }
+  }
+
+  btn.disabled=false;btn.textContent='전체 업로드';
+  showToast(fail?`✅ ${success}개 완료  ❌ ${fail}개 실패`:`✅ ${success}개 모두 업로드됐어요!`);
+};
 </script>
 
 <style>
@@ -1118,6 +1300,34 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   .hdr-right .btn-ghost{padding:5px 8px;font-size:.7rem}
   .slide-double{grid-template-columns:1fr}
 }
+/* ── 악보 업로드 도구 ── */
+#screen-filemanager{flex-direction:column}
+.fm-body{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.fm-toolbar{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.fm-toolbar select{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:8px 12px;color:var(--text);font-family:inherit;font-size:.87rem}
+.fm-add-label{display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+.fm-hint{font-size:.72rem;color:var(--muted);margin-left:auto}
+.fm-list-area{flex:1;overflow-y:auto;padding:12px 16px}
+.fm-empty{text-align:center;padding:60px 16px;color:var(--muted);font-size:.85rem;line-height:2.2}
+.fm-item{display:flex;gap:12px;align-items:flex-start;padding:12px;border:1px solid var(--border);border-radius:10px;margin-bottom:10px;background:var(--surface);transition:border-color .2s}
+.fm-item.done{border-color:var(--success);background:rgba(74,222,128,.05)}
+.fm-item.error{border-color:var(--danger);background:rgba(248,113,113,.05)}
+.fm-thumb{width:90px;height:110px;object-fit:contain;border-radius:6px;cursor:pointer;flex-shrink:0;border:1px solid var(--border);background:#fff}
+.fm-thumb:hover{opacity:.82;transform:scale(1.02)}
+.fm-item-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.fm-orig-name{font-size:.7rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fm-name-row{display:flex;align-items:center;gap:6px}
+.fm-prefix-badge{background:rgba(108,143,255,.2);color:var(--accent);padding:5px 9px;border-radius:6px;font-size:.9rem;font-weight:700;flex-shrink:0}
+.fm-name-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-family:inherit;font-size:.9rem}.fm-name-input:focus{outline:none;border-color:var(--accent)}
+.fm-preview-name{font-size:.78rem;color:var(--muted)}.fm-preview-name strong{color:var(--text)}
+.fm-item-actions{display:flex;flex-direction:column;align-items:center;gap:8px;flex-shrink:0;padding-top:2px}
+.fm-status{font-size:1.1rem}
+#modal-fm-preview{cursor:zoom-out}
+@media(max-width:600px){.fm-thumb{width:72px;height:88px}.fm-hint{display:none}}
+@media(min-width:1025px){
+  .fm-list-area{max-width:800px;margin:0 auto;width:100%}
+  .fm-toolbar{max-width:800px;margin:0 auto;width:100%}
+}
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 </style>
 </head>
@@ -1226,9 +1436,16 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
               <span class="si-value uname"></span>
               <span class="si-arrow">›</span>
             </div>
+            <div class="settings-item admin-only" onclick="openFileManager()" style="display:none">
+              <span class="si-icon">🗂</span>
+              <span class="si-label">악보 업로드 도구</span>
+              <span class="si-value" style="font-size:.7rem;color:var(--muted)">이미지 보면서 업로드</span>
+              <span class="si-arrow">›</span>
+            </div>
             <div class="settings-item admin-only" onclick="openUploadModal()" style="display:none">
               <span class="si-icon">📤</span>
-              <span class="si-label">악보 업로드</span>
+              <span class="si-label">빠른 업로드</span>
+              <span class="si-value" style="font-size:.7rem;color:var(--muted)">단건</span>
               <span class="si-arrow">›</span>
             </div>
             <div class="settings-item admin-only" onclick="openUserModal()" style="display:none">
@@ -1332,11 +1549,47 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
   </div>
 </div>
 
+<!-- ════════════════════
+     악보 업로드 도구
+     ════════════════════ -->
+<div class="screen" id="screen-filemanager">
+  <div class="hdr">
+    <button class="btn btn-ghost" onclick="closeFmScreen()">← 설정</button>
+    <h1 style="flex:1;text-align:center">악보 업로드 도구</h1>
+    <button class="btn btn-primary" id="fm-upload-btn" onclick="uploadFmAll()">전체 업로드</button>
+  </div>
+  <div class="fm-body">
+    <div class="fm-toolbar">
+      <select id="fm-hymnal" onchange="onFmHymnalChange()">
+        <option value="new">새찬송가</option>
+        <option value="old">구찬송가</option>
+        <option value="ccm">CCM</option>
+      </select>
+      <label class="btn btn-ghost fm-add-label">
+        📁 파일 추가
+        <input type="file" accept=".jpg,.jpeg,.png" multiple onchange="onFmFilesSelected(this)" style="display:none">
+      </label>
+      <span class="fm-hint">🔍 이미지 클릭하면 크게 볼 수 있어요</span>
+    </div>
+    <div class="fm-list-area">
+      <div id="fm-list">
+        <div class="fm-empty">파일을 선택하면 여기에 표시돼요<br><span class="muted-sm">여러 파일 동시 선택 가능</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 악보 크게 보기 모달 -->
+<div class="modal-bg" id="modal-fm-preview" onclick="closeFmPreview()" style="padding:12px">
+  <img id="fm-preview-img" style="max-width:92vw;max-height:92vh;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.7);object-fit:contain">
+</div>
+
 <!-- 뷰어 -->
 <div class="screen" id="screen-viewer">
   <div class="viewer-hdr">
     <button class="btn btn-ghost" style="padding:5px 10px;font-size:.75rem" onclick="closeViewer()">← 목록</button>
     <div class="viewer-title" id="view-conti-title"></div>
+    <button class="btn btn-xs" id="btn-viewer-mapping" onclick="openCurrentMapping()" style="display:none;white-space:nowrap">🗺 매핑</button>
     <button class="btn btn-xs" id="btn-viewer-edit" onclick="viewerGoEdit()" style="display:none;white-space:nowrap">✏️ 편집</button>
   </div>
   <div class="viewer-body">

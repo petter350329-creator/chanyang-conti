@@ -634,21 +634,28 @@ window.addSong=async(hymnal,num,title)=>{
 // ── 매핑 ──
 window.openMappingModal=(hymnal,songNum)=>{
   const pages=getPages(hymnal,songNum);
+  const title=getTitle(hymnal,songNum);
   document.getElementById('map-hymnal').value=hymnal;
   document.getElementById('map-songnum').value=songNum;
   document.getElementById('map-pages').value=pages?pages.join(','):'';
-  document.getElementById('map-title-h').textContent=`${songNum}장 페이지 수정`;
+  document.getElementById('map-title-input').value=title||'';
+  document.getElementById('map-title-h').textContent=`${songNum}장 매핑 수정`;
   document.getElementById('modal-mapping').classList.add('show');
 };
 window.saveMappingEdit=async()=>{
   const hymnal=document.getElementById('map-hymnal').value;
   const songNum=document.getElementById('map-songnum').value;
   const pages=document.getElementById('map-pages').value.trim().split(',').map(s=>s.trim()).filter(s=>s!=='');
+  const titleVal=document.getElementById('map-title-input').value.trim();
   const parsed=pages.map(s=>isNaN(s)?s:parseInt(s));
   if(!parsed.length){alert('페이지를 입력해주세요');return;}
   const val=parsed.length===1?parsed[0]:parsed;
-  await update(ref(db,`mapping/${hymnal}`),{[songNum]:val});
+  const updates={};
+  updates[`mapping/${hymnal}/${songNum}`]=val;
+  if(titleVal) updates[`titles/${hymnal}/${songNum}`]=titleVal;
+  await update(ref(db,'/'),updates);
   mappingCache[hymnal]=mappingCache[hymnal]||{};mappingCache[hymnal][songNum]=val;
+  if(titleVal){titlesCache[hymnal]=titlesCache[hymnal]||{};titlesCache[hymnal][songNum]=titleVal;}
   closeMappingModal();showToast('✅ 매핑 수정됐어요');renderEditorPreview();
 };
 window.closeMappingModal=()=>document.getElementById('modal-mapping').classList.remove('show');
@@ -761,7 +768,7 @@ async function loadUserList(){
           <select id="req-role-${uid}" class="role-select">
             <option value="member">멤버</option><option value="admin">관리자</option>
           </select>
-          <button class="btn btn-primary" style="padding:4px 10px;font-size:.72rem" onclick="approveRequest('${uid}','${u.email||''}','${u.name||''}','${u.affiliation||''}')">수락</button>
+          <button class="btn btn-primary" style="padding:4px 10px;font-size:.72rem" onclick="approveRequest('${uid}')">수락</button>
           <button class="btn-danger-xs" onclick="rejectRequest('${uid}')">거절</button>
         </div>
       </div>`).join('')}`:'';
@@ -787,11 +794,15 @@ async function loadUserList(){
       </div>`).join('')}`:'';
   document.getElementById('user-list').innerHTML=reqHtml+userHtml||'<div class="empty-conti">없음</div>';
 }
-window.approveRequest=async(uid,email,name,affil)=>{
+window.approveRequest=async(uid)=>{
   const role=document.getElementById(`req-role-${uid}`)?.value||'member';
-  await set(ref(db,`users/${uid}`),{email,name,nickname:name,affiliation:affil,role,createdAt:Date.now()});
+  const snap=await get(ref(db,`requests/${uid}`));
+  if(!snap.exists()){await loadUserList();return;}
+  const u=snap.val();
+  await set(ref(db,`users/${uid}`),{email:u.email||'',name:u.name||'',nickname:u.name||'',affiliation:u.affiliation||'',role,createdAt:Date.now()});
   await remove(ref(db,`requests/${uid}`));
-  showToast('✅ 승인됐어요');loadUserList();
+  showToast('✅ 승인됐어요');
+  await loadUserList();
 };
 window.rejectRequest=async(uid)=>{if(!confirm('거절할까요?'))return;await remove(ref(db,`requests/${uid}`));loadUserList();};
 window.changeRole=async(uid,role)=>{await update(ref(db,`users/${uid}`),{role});showToast('권한 변경됐어요');};
@@ -1382,9 +1393,11 @@ body{font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text
 <!-- 매핑 모달 -->
 <div class="modal-bg" id="modal-mapping">
   <div class="modal">
-    <h3 id="map-title-h">페이지 수정</h3>
+    <h3 id="map-title-h">매핑 수정</h3>
     <input type="hidden" id="map-hymnal"><input type="hidden" id="map-songnum">
-    <p class="modal-hint">PDF 페이지 번호 · 2장: <strong>27,28</strong> · JPG키: <strong>128a,128b</strong></p>
+    <p class="modal-hint">제목 <span style="color:var(--muted)">(검색에 사용됩니다)</span></p>
+    <input type="text" id="map-title-input" placeholder="예: 천지창조주 하나님">
+    <p class="modal-hint" style="margin-top:4px">페이지 번호 · 2장: <strong>27,28</strong> · JPG키: <strong>128a,128b</strong></p>
     <input type="text" id="map-pages" placeholder="예: 27 또는 27,28">
     <div class="modal-btns"><button class="ok" onclick="saveMappingEdit()">저장</button><button class="cancel" onclick="closeMappingModal()">취소</button></div>
   </div>
